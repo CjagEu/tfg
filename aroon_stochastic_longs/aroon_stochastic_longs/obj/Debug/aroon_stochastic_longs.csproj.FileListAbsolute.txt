@@ -1,0 +1,13 @@
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\bin\Debug\app.config
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\bin\Debug\log4net.config.xml
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\bin\Debug\aroon_stochastic_longs.exe.config
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\bin\Debug\aroon_stochastic_longs.exe
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\bin\Debug\aroon_stochastic_longs.pdb
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\bin\Debug\log4net.dll
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\bin\Debug\TradingMotionSDKv2.dll
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\bin\Debug\TA-Lib-Core.dll
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\obj\Debug\aroon_stochastic_longs.csprojAssemblyReference.cache
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\obj\Debug\aroon_stochastic_longs.csproj.CoreCompileInputs.cache
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\obj\Debug\aroon_stochastic_longs.csproj.CopyComplete
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\obj\Debug\aroon_stochastic_longs.exe
+C:\Users\cjalo\source\repos\TFG\aroon_stochastic_longs\aroon_stochastic_longs\obj\Debug\aroon_stochastic_longs.pdb
