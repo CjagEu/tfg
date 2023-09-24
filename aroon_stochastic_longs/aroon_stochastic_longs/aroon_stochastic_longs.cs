@@ -99,7 +99,7 @@ namespace aroon_stochastic_longs
         {
             log.Debug("AroonStochasticLongs onInitialize()");
 
-            var indAroon = new AroonIndicator(Bars.Bars, (int)GetInputParameter("Aroon Period") * (int)GetInputParameter("Factor Multiplier"));
+            var indAroon = new AroonIndicator(Bars.Bars, (int)GetInputParameter("Aroon Period"));
 
             var indStochastic = new StochasticIndicator(
                 Bars.Bars,
@@ -142,7 +142,7 @@ namespace aroon_stochastic_longs
 
                 if (indAroon.GetAroonUp()[0] >= 75)  
                 {
-                    if (indStochastic.GetD()[0] > indStochastic.GetUpperLine()[0])
+                    if (indStochastic.GetD()[2] < indStochastic.GetD()[1] && indStochastic.GetD()[1] < indStochastic.GetD()[0] && indStochastic.GetD()[0] >= indStochastic.GetUpperLine()[0])
                     {
                         Order buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
                         this.InsertOrder(buyOrder);
