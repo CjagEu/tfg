@@ -5,6 +5,7 @@ using TradingMotion.SDKv2.Markets.Indicators.OverlapStudies;
 using TradingMotion.SDKv2.Algorithms;
 using TradingMotion.SDKv2.Algorithms.InputParameters;
 using TradingMotion.SDKv2.Markets.Indicators.Momentum;
+using System;
 
 namespace aroon_stochastic_longs
 {
@@ -17,6 +18,7 @@ namespace aroon_stochastic_longs
     /// </remarks> 
     public class aroon_stochastic_longs : Strategy
     {
+        Order buyOrder;
 
         /// <summary>
         /// Strategy required constructor
@@ -88,6 +90,9 @@ namespace aroon_stochastic_longs
                 new InputParameter("Stochastic Lower Line", 20),
 
                 new InputParameter("Factor Multiplier", 4),
+
+                new InputParameter("Porcentaje TP", 0.50D),
+                new InputParameter("Porcentaje SL", -0.25D),
             };
         }
 
@@ -144,7 +149,7 @@ namespace aroon_stochastic_longs
                 {
                     if (indStochastic.GetD()[2] < indStochastic.GetD()[1] && indStochastic.GetD()[1] < indStochastic.GetD()[0] && indStochastic.GetD()[0] >= indStochastic.GetUpperLine()[0])
                     {
-                        Order buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
+                        buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
                         this.InsertOrder(buyOrder);
                     }
                 }
@@ -159,12 +164,44 @@ namespace aroon_stochastic_longs
                     this.InsertOrder(sellOrder);
                 }*/
 
-                if (indStochastic.GetD()[0] < 50 && indAroon.GetAroonDown()[0] >= 75)
+                if (porcentajeMovimientoPrecio() <= (double)GetInputParameter("Porcentaje SL"))
+                {
+                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Porcentaje conseguido, close long");
+                    this.InsertOrder(sellOrder);
+                }
+                else if (porcentajeMovimientoPrecio() >= (double)GetInputParameter("Porcentaje TP"))
+                {
+                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Porcentaje conseguido, close long");
+                    this.InsertOrder(sellOrder);      
+                }
+                else if (indStochastic.GetD()[0] < 50 && indAroon.GetAroonDown()[0] >= 75)
                 {
                     Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend ended, close long");
                     this.InsertOrder(sellOrder);
                 }
+                else
+                {
+                    //log.Info(string.Format("{0:0.00}", porcentajeMovimientoPrecio()) + " % ");
+                }                     
             }
+        }
+
+        // Devuelve en porcentaje cuánto se ha movido el precio desde la entrada.
+        protected double porcentajeMovimientoPrecio()
+        {
+            double porcentaje = -1;
+
+            /* Comprobar si el precio está por encima del precio de entrada */
+            if (Bars.Close[0] > buyOrder.FillPrice)
+            {
+                porcentaje = ((Bars.Close[0] / buyOrder.FillPrice) - 1) * 100;
+            }
+            else
+            {
+                porcentaje = (((buyOrder.FillPrice / Bars.Close[0]) - 1) * 100) * -1;
+            }
+
+            return porcentaje;
         }
     }
 }
