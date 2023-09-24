@@ -191,11 +191,14 @@ namespace aroon_stochastic_longs
         {
             double porcentaje = -1;
 
-            /* Comprobar si el precio está por encima del precio de entrada */
+            /* Si el precio está por encima del precio de entrada,
+             * Se calcula el porcentaje para Take Profit*/
             if (Bars.Close[0] > buyOrder.FillPrice)
             {
                 porcentaje = ((Bars.Close[0] / buyOrder.FillPrice) - 1) * 100;
             }
+            /* Si el precio está por debajo del precio de entrada,
+             * Se calcula el porcentaje para Stop Loss (en negativo)*/
             else
             {
                 porcentaje = (((buyOrder.FillPrice / Bars.Close[0]) - 1) * 100) * -1;
