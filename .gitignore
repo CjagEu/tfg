@@ -2,3 +2,4 @@ app.config
 storage.*
 .vs
 .suo
+.csproj
