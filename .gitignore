@@ -1,2 +1,4 @@
 app.config
 storage.*
+.suo
+.vs
