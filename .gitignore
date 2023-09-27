@@ -7,3 +7,4 @@ storage.*
 .pdb
 bin/Debug
 bin/Release
+obj/Release
