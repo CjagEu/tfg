@@ -6,3 +6,4 @@ storage.*
 .exe
 .pdb
 bin/Debug
+bin/Release
