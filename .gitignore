@@ -1,5 +1,8 @@
 app.config
 storage.*
-.vs
+.vs/
 .suo
 .csproj
+.exe
+.pdb
+bin/Debug
