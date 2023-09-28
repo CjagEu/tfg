@@ -164,16 +164,19 @@ namespace aroon_stochastic_longs
                     this.InsertOrder(sellOrder);
                 }*/
 
+                /* Cerrar long si toca TP */
                 if (porcentajeMovimientoPrecio() <= (double)GetInputParameter("Porcentaje SL"))
                 {
                     Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Porcentaje conseguido, close long");
                     this.InsertOrder(sellOrder);
                 }
+                /* Cerrar long si toca SL */
                 else if (porcentajeMovimientoPrecio() >= (double)GetInputParameter("Porcentaje TP"))
                 {
                     Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Porcentaje conseguido, close long");
                     this.InsertOrder(sellOrder);      
                 }
+                /* Cierre de trade normal*/
                 else if (indStochastic.GetD()[0] < 50 && indAroon.GetAroonDown()[0] >= 75)
                 {
                     Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend ended, close long");
