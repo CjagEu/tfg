@@ -8,3 +8,5 @@ storage.*
 bin/Debug
 bin/Release
 obj/Release
+bin/
+obj/
