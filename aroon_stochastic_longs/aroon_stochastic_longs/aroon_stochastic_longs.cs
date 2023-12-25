@@ -82,7 +82,7 @@ namespace aroon_stochastic_longs
         {
             return new InputParameterList
             {
-                new InputParameter("Aroon Period", 25),
+                new InputParameter("Aroon Period", 400),
 
                 new InputParameter("K Line", 13),
                 new InputParameter("D Line", 3),
@@ -131,7 +131,7 @@ namespace aroon_stochastic_longs
             
             /* Estrategia conservadora:
              *      Filtro de tendencia: Linea Up de Aroon mayor que 75
-             *      Trigger: Estocástico mayor que su Upper Line
+             *      Trigger: Estocástico mayor que su Upper Line y creciente
              */
             if (GetOpenPosition() == 0)
             {
@@ -144,7 +144,6 @@ namespace aroon_stochastic_longs
                         this.InsertOrder(buyOrder);
                     }
                 }*/
-
                 if (indAroon.GetAroonUp()[0] >= 75)  
                 {
                     if (indStochastic.GetD()[2] < indStochastic.GetD()[1] && indStochastic.GetD()[1] < indStochastic.GetD()[0] && indStochastic.GetD()[0] >= indStochastic.GetUpperLine()[0])
@@ -164,22 +163,28 @@ namespace aroon_stochastic_longs
                     this.InsertOrder(sellOrder);
                 }*/
 
-                /* Cerrar long si toca TP */
+                /* Cerrar long si toca SL */
                 if (porcentajeMovimientoPrecio() <= (double)GetInputParameter("Porcentaje SL"))
                 {
-                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Porcentaje conseguido, close long");
+                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Toca StopLoss, close long");
                     this.InsertOrder(sellOrder);
                 }
-                /* Cerrar long si toca SL */
+                /* Cerrar long si toca TP */
                 else if (porcentajeMovimientoPrecio() >= (double)GetInputParameter("Porcentaje TP"))
                 {
                     Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Porcentaje conseguido, close long");
                     this.InsertOrder(sellOrder);      
                 }
                 /* Cierre de trade normal*/
-                else if (indStochastic.GetD()[0] < 50 && indAroon.GetAroonDown()[0] >= 75)
+//                else if (indStochastic.GetD()[0] < 50 && indAroon.GetAroonDown()[0] >= 75)
+//                {
+//                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend ended, close long");
+//                    this.InsertOrder(sellOrder);
+//                }
+                /* Cierre de trade por indicador Aroon*/
+                else if (indAroon.GetAroonUp()[0] < 75)
                 {
-                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend ended, close long");
+                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Aroon Up < 75, close long");
                     this.InsertOrder(sellOrder);
                 }
                 else
