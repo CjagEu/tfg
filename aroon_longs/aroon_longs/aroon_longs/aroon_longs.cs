@@ -5,18 +5,14 @@ using TradingMotion.SDKv2.Markets.Indicators.OverlapStudies;
 using TradingMotion.SDKv2.Algorithms;
 using TradingMotion.SDKv2.Algorithms.InputParameters;
 using TradingMotion.SDKv2.Markets.Indicators.Momentum;
-using System;
 
-namespace aroon_stochastic_longs
+namespace aroon_longs
 {
     /// <summary> 
-    /// Aroon Stochastic Longs Strategy
+    /// Aroon Longs Strategy
     /// </summary> 
     /// <remarks> 
-    /// The Aroon Stochastic Longs Strategy uses the Aroon indicator to filter de market and the Stochastic Oscillator indicator
-    /// to open only longs trades as trigger.
-    /// </remarks> 
-    public class aroon_stochastic_longs : Strategy
+    public class aroon_longs : Strategy
     {
         Order buyOrder;
         int counter = 0;
@@ -26,7 +22,7 @@ namespace aroon_stochastic_longs
         /// </summary>
         /// <param Name="mainChart">The Chart over the Strategy will run</param>
         /// <param Name="secondaryCharts">Secondary charts that the Strategy can use</param>
-        public aroon_stochastic_longs(Chart mainChart, List<Chart> secondaryCharts)
+        public aroon_longs(Chart mainChart, List<Chart> secondaryCharts)
             : base(mainChart, secondaryCharts)
         {
 
@@ -38,7 +34,7 @@ namespace aroon_stochastic_longs
         /// <returns>The complete name of the strategy</returns>
         public override string Name
         {
-            get { return "Aroon Stochastic Longs Strategy"; }
+            get { return "Aroon Longs Strategy"; }
         }
 
         /// <summary>
@@ -67,8 +63,7 @@ namespace aroon_stochastic_longs
         /// Flag that indicates if the strategy uses advanced Order management or standard
         /// </summary>
         /// <returns>
-        /// True if strategy uses advanced Order management. 
-        /// This means that the strategy uses the advanced methods (InsertOrder/CancelOrder/ModifyOrder) in opposite of the simple ones (Buy/Sell/ExitLong/ExitShort).
+        /// True if strategy uses advanced Order management. This means that the strategy uses the advanced methods (InsertOrder/CancelOrder/ModifyOrder) in opposite of the simple ones (Buy/Sell/ExitLong/ExitShort).
         /// </returns>
         public override bool UsesAdvancedOrderManagement
         {
@@ -84,18 +79,7 @@ namespace aroon_stochastic_longs
             return new InputParameterList
             {
                 new InputParameter("Aroon Period", 16),
-
-                new InputParameter("K Line", 13),
-                new InputParameter("D Line", 3),
-                new InputParameter("Stochastic Upper Line", 80),
-                new InputParameter("Stochastic Lower Line", 20),
-
-                new InputParameter("Factor Multiplier", 4),
-
                 new InputParameter("Wait Window", 5),
-
-                new InputParameter("Porcentaje TP", 0.50D),
-                new InputParameter("Porcentaje SL", -0.25D),
             };
         }
 
@@ -105,22 +89,11 @@ namespace aroon_stochastic_longs
         /// </summary>
         public override void OnInitialize()
         {
-            log.Debug("AroonStochasticLongs onInitialize()");
+            log.Debug("Aroon Longs onInitialize()");
 
             var indAroon = new AroonIndicator(Bars.Bars, (int)GetInputParameter("Aroon Period"));
 
-            var indStochastic = new StochasticIndicator(
-                Bars.Bars,
-                (int)GetInputParameter("K Line"),
-                (int)GetInputParameter("D Line"),
-                TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma,
-                (int)GetInputParameter("D Line"),
-                TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma
-            );
-
             AddIndicator("Aroon", indAroon);
-            AddIndicator("Stochastic", indStochastic);
-
         }
 
         /// <summary>
@@ -130,16 +103,16 @@ namespace aroon_stochastic_longs
         public override void OnNewBar()
         {
             var indAroon = (AroonIndicator)GetIndicator("Aroon");
-            var indStochastic = (StochasticIndicator)GetIndicator("Stochastic");
-            
-            /* Estrategia conservadora:
-             *      Filtro de tendencia: Linea Up de Aroon mayor que 75
-             *      Trigger: Estocástico mayor que su Upper Line y creciente
+
+            /* Estrategia:
+             *      La estrategia se basa en que la línea Aroon Up indica la existencia de tendencia alcista.
+             *      Si la linea Aroon Up está por encima de 90 varios días, se confirma la tendencia y se abre
+             *      operación.
              */
             if (GetOpenPosition() == 0)
             {
-                /* */
-                if (indStochastic.GetD()[0] > indStochastic.GetUpperLine()[0])
+                /* Si durante N días la línea Aroon Up se ha mantenido por encima de 90, abrir posición. */
+                if (indAroon.GetAroonUp()[0] >= 90)
                 {
                     counter++;
                     if (counter == (int)GetInputParameter("Wait Window"))
@@ -151,13 +124,13 @@ namespace aroon_stochastic_longs
             }
             else if (GetOpenPosition() != 0)
             {
-                /* */
-                if (indStochastic.GetD()[0] < indStochastic.GetLowerLine()[0])
+                /* Si la línea Aroon Up desciende a menos de 75, cerrar long. */
+                if (indAroon.GetAroonUp()[0] <= 75)
                 {
-                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Porcentaje conseguido, close long");
+                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Aroon Up < 75, close long");
                     this.InsertOrder(sellOrder);
                     counter = 0;
-                }                  
+                }
             }
         }
     }

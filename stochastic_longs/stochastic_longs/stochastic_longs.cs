@@ -7,16 +7,16 @@ using TradingMotion.SDKv2.Algorithms.InputParameters;
 using TradingMotion.SDKv2.Markets.Indicators.Momentum;
 using System;
 
-namespace aroon_stochastic_longs
+namespace stochastic_longs
 {
     /// <summary> 
-    /// Aroon Stochastic Longs Strategy
+    /// Stochastic Longs Strategy
     /// </summary> 
-    /// <remarks> 
+    /// <remarks> d
     /// The Aroon Stochastic Longs Strategy uses the Aroon indicator to filter de market and the Stochastic Oscillator indicator
     /// to open only longs trades as trigger.
     /// </remarks> 
-    public class aroon_stochastic_longs : Strategy
+    public class stochastic_longs : Strategy
     {
         Order buyOrder;
         int counter = 0;
@@ -26,7 +26,7 @@ namespace aroon_stochastic_longs
         /// </summary>
         /// <param Name="mainChart">The Chart over the Strategy will run</param>
         /// <param Name="secondaryCharts">Secondary charts that the Strategy can use</param>
-        public aroon_stochastic_longs(Chart mainChart, List<Chart> secondaryCharts)
+        public stochastic_longs(Chart mainChart, List<Chart> secondaryCharts)
             : base(mainChart, secondaryCharts)
         {
 
@@ -38,7 +38,7 @@ namespace aroon_stochastic_longs
         /// <returns>The complete name of the strategy</returns>
         public override string Name
         {
-            get { return "Aroon Stochastic Longs Strategy"; }
+            get { return "Stochastic Longs Strategy"; }
         }
 
         /// <summary>
@@ -83,19 +83,12 @@ namespace aroon_stochastic_longs
         {
             return new InputParameterList
             {
-                new InputParameter("Aroon Period", 16),
-
                 new InputParameter("K Line", 13),
                 new InputParameter("D Line", 3),
                 new InputParameter("Stochastic Upper Line", 80),
                 new InputParameter("Stochastic Lower Line", 20),
 
-                new InputParameter("Factor Multiplier", 4),
-
                 new InputParameter("Wait Window", 5),
-
-                new InputParameter("Porcentaje TP", 0.50D),
-                new InputParameter("Porcentaje SL", -0.25D),
             };
         }
 
@@ -105,9 +98,7 @@ namespace aroon_stochastic_longs
         /// </summary>
         public override void OnInitialize()
         {
-            log.Debug("AroonStochasticLongs onInitialize()");
-
-            var indAroon = new AroonIndicator(Bars.Bars, (int)GetInputParameter("Aroon Period"));
+            log.Debug("StochasticLongs onInitialize()");
 
             var indStochastic = new StochasticIndicator(
                 Bars.Bars,
@@ -118,7 +109,6 @@ namespace aroon_stochastic_longs
                 TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma
             );
 
-            AddIndicator("Aroon", indAroon);
             AddIndicator("Stochastic", indStochastic);
 
         }
@@ -129,16 +119,14 @@ namespace aroon_stochastic_longs
         /// </summary>
         public override void OnNewBar()
         {
-            var indAroon = (AroonIndicator)GetIndicator("Aroon");
             var indStochastic = (StochasticIndicator)GetIndicator("Stochastic");
-            
-            /* Estrategia conservadora:
-             *      Filtro de tendencia: Linea Up de Aroon mayor que 75
-             *      Trigger: Estocástico mayor que su Upper Line y creciente
+
+            /* Estrategia:
+             *  Se basa en la línea del estocástico.
              */
             if (GetOpenPosition() == 0)
             {
-                /* */
+                /* Si el estocástico se mantiene por encima de la línea superior N días, abrir long. */
                 if (indStochastic.GetD()[0] > indStochastic.GetUpperLine()[0])
                 {
                     counter++;
@@ -151,13 +139,13 @@ namespace aroon_stochastic_longs
             }
             else if (GetOpenPosition() != 0)
             {
-                /* */
+                /* Estocástico desciende a menos de la linea inferior, cerrar long. */
                 if (indStochastic.GetD()[0] < indStochastic.GetLowerLine()[0])
                 {
-                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Porcentaje conseguido, close long");
+                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Estocástico menor que su línea inferior , close long");
                     this.InsertOrder(sellOrder);
                     counter = 0;
-                }                  
+                }
             }
         }
     }
