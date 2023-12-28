@@ -15,7 +15,7 @@ namespace aroon_longs
     public class aroon_longs : Strategy
     {
         Order buyOrder;
-        int counter = 0;
+        bool canOpenPosition = false;
 
         /// <summary>
         /// Strategy required constructor
@@ -80,6 +80,9 @@ namespace aroon_longs
             {
                 new InputParameter("Aroon Period", 16),
                 new InputParameter("Wait Window", 5),
+
+                new InputParameter("Porcentaje SL", -2D),
+                new InputParameter("Porcentaje TP", 5D),
             };
         }
 
@@ -112,26 +115,56 @@ namespace aroon_longs
             if (GetOpenPosition() == 0)
             {
                 /* Si durante N días la línea Aroon Up se ha mantenido por encima de 90, abrir posición. */
-                if (indAroon.GetAroonUp()[0] >= 90)
+                for (int i = (int)GetInputParameter("Wait Window"); i >= 1; i--)
                 {
-                    counter++;
-                    if (counter == (int)GetInputParameter("Wait Window"))
+                    if (indAroon.GetAroonUp()[i] >= 90)
                     {
-                        buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                        this.InsertOrder(buyOrder);
+                        canOpenPosition = true;
                     }
+                }
+                if (canOpenPosition)
+                {
+                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
+                    this.InsertOrder(buyOrder);
+                    canOpenPosition = false;
                 }
             }
             else if (GetOpenPosition() != 0)
             {
+                if (porcentajeMovimientoPrecio() <= (double)GetInputParameter("Porcentaje SL"))
+                {
+                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "StopLoss, close long");
+                    this.InsertOrder(sellOrder);
+                    log.Info(porcentajeMovimientoPrecio());
+                }
                 /* Si la línea Aroon Up desciende a menos de 75, cerrar long. */
-                if (indAroon.GetAroonUp()[0] <= 75)
+                else if (indAroon.GetAroonUp()[0] <= 75)
                 {
                     Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Aroon Up < 75, close long");
                     this.InsertOrder(sellOrder);
-                    counter = 0;
                 }
             }
+        }
+
+
+        // Devuelve en porcentaje cuánto se ha movido el precio desde la entrada.
+        protected double porcentajeMovimientoPrecio()
+        {
+            double porcentaje = 0;
+
+            // Calcular la variación porcentual del precio con respecto a la entrada.
+            if (Bars.Close[0] > buyOrder.FillPrice)
+            {
+                // Precio actual por encima del precio de entrada.
+                porcentaje = ((Bars.Close[0] / buyOrder.FillPrice) - 1) * 100;
+            }
+            else if (Bars.Close[0] < buyOrder.FillPrice)
+            {
+                // Precio actual por debajo del precio de entrada.
+                porcentaje = ((Bars.Close[0] / buyOrder.FillPrice) - 1) * 100;
+            }
+
+            return porcentaje;
         }
     }
 }
