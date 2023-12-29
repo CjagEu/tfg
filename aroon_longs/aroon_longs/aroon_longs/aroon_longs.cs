@@ -80,6 +80,7 @@ namespace aroon_longs
             {
                 new InputParameter("Aroon Period", 16),
                 new InputParameter("Wait Window", 5),
+                new InputParameter("Exit Operation Level", 75),
 
                 new InputParameter("Porcentaje SL", -2D),
                 new InputParameter("Porcentaje TP", 5D),
@@ -135,10 +136,10 @@ namespace aroon_longs
                 {
                     Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "StopLoss, close long");
                     this.InsertOrder(sellOrder);
-                    log.Info(porcentajeMovimientoPrecio());
+                    //log.Info(porcentajeMovimientoPrecio());
                 }
                 /* Si la línea Aroon Up desciende a menos de 75, cerrar long. */
-                else if (indAroon.GetAroonUp()[0] <= 75)
+                else if (indAroon.GetAroonUp()[0] <= (int)GetInputParameter("Exit Operation Level"))
                 {
                     Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Aroon Up < 75, close long");
                     this.InsertOrder(sellOrder);
