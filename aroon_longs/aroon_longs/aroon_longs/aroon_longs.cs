@@ -79,6 +79,7 @@ namespace aroon_longs
             return new InputParameterList
             {
                 new InputParameter("Aroon Period", 16),
+
                 new InputParameter("Wait Window", 5),
                 new InputParameter("Exit Operation Level", 75),
 
@@ -116,14 +117,20 @@ namespace aroon_longs
             if (GetOpenPosition() == 0)
             {
                 /* Si durante N días la línea Aroon Up se ha mantenido por encima de 90, abrir posición. */
-                for (int i = (int)GetInputParameter("Wait Window"); i >= 1; i--)
-                {
-                    if (indAroon.GetAroonUp()[i] >= 90)
-                    {
-                        canOpenPosition = true;
-                    }
-                }
-                if (canOpenPosition)
+                //for (int i = (int)GetInputParameter("Wait Window"); i >= 1; i--)
+                //{
+                //    if (indAroon.GetAroonUp()[i] >= 90)
+                //    {
+                //        canOpenPosition = true;
+                //    }
+                //}
+                //if (canOpenPosition)
+                //{
+                //    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
+                //    this.InsertOrder(buyOrder);
+                //    canOpenPosition = false;
+                //}
+                if (indAroon.GetAroonUp()[0] >= 90 && indAroon.GetAroonDown()[0] <= 30)
                 {
                     buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
                     this.InsertOrder(buyOrder);
