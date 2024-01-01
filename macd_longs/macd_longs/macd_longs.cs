@@ -7,26 +7,25 @@ using TradingMotion.SDKv2.Algorithms.InputParameters;
 using TradingMotion.SDKv2.Markets.Indicators.Momentum;
 using System;
 
-namespace stochastic_longs
+namespace macd_longs
 {
     /// <summary> 
-    /// Stochastic Longs Strategy
+    /// TradingMotion SDK Golden Cross Strategy
     /// </summary> 
-    /// <remarks> d
-    /// The Aroon Stochastic Longs Strategy uses the Aroon indicator to filter de market and the Stochastic Oscillator indicator
-    /// to open only longs trades as trigger.
+    /// <remarks> 
+    /// The Golden Cross Strategy uses two moving averages, one with short period (called Fast) and the other with a longer period (called Slow).
+    /// When the fast avg crosses the slow avg from below it is called the "Golden Cross" and it is considered as a signal for a following bullish trend.
+    /// The strategy will open a Long position right after a "Golden Cross", and will go flat when the fast average crosses below the slow one.
     /// </remarks> 
-    public class stochastic_longs : Strategy
+    public class macd_longs : Strategy
     {
-        Order buyOrder, stopLossOrder;
-        double stopLoss = 0D;
-
+        Order buyOrder;
         /// <summary>
         /// Strategy required constructor
         /// </summary>
         /// <param Name="mainChart">The Chart over the Strategy will run</param>
         /// <param Name="secondaryCharts">Secondary charts that the Strategy can use</param>
-        public stochastic_longs(Chart mainChart, List<Chart> secondaryCharts)
+        public macd_longs(Chart mainChart, List<Chart> secondaryCharts)
             : base(mainChart, secondaryCharts)
         {
 
@@ -38,7 +37,7 @@ namespace stochastic_longs
         /// <returns>The complete name of the strategy</returns>
         public override string Name
         {
-            get { return "Stochastic Longs Strategy"; }
+            get { return "MACD Longs Strategy"; }
         }
 
         /// <summary>
@@ -67,8 +66,7 @@ namespace stochastic_longs
         /// Flag that indicates if the strategy uses advanced Order management or standard
         /// </summary>
         /// <returns>
-        /// True if strategy uses advanced Order management. 
-        /// This means that the strategy uses the advanced methods (InsertOrder/CancelOrder/ModifyOrder) in opposite of the simple ones (Buy/Sell/ExitLong/ExitShort).
+        /// True if strategy uses advanced Order management. This means that the strategy uses the advanced methods (InsertOrder/CancelOrder/ModifyOrder) in opposite of the simple ones (Buy/Sell/ExitLong/ExitShort).
         /// </returns>
         public override bool UsesAdvancedOrderManagement
         {
@@ -83,10 +81,11 @@ namespace stochastic_longs
         {
             return new InputParameterList
             {
-                new InputParameter("K Line", 14),
-                new InputParameter("D Line", 3),
-                new InputParameter("Stochastic Upper Line", 80),
-                new InputParameter("Stochastic Lower Line", 20),
+                new InputParameter("fastPeriod", 12),
+                new InputParameter("slowPeriod", 26),
+                new InputParameter("signalPeriod", 9),
+
+                new InputParameter("aroonPeriod", 25),
             };
         }
 
@@ -96,19 +95,22 @@ namespace stochastic_longs
         /// </summary>
         public override void OnInitialize()
         {
-            log.Debug("StochasticLongs onInitialize()");
+            log.Debug("MACDLongsStrategy onInitialize()");
 
-            var indStochastic = new StochasticIndicator(
-                Bars.Bars,
-                (int)GetInputParameter("K Line"),
-                (int)GetInputParameter("D Line"),
+            var indMACD = new MACDExtIndicator(
+                Bars.Close,
+                (int)GetInputParameter("fastPeriod"),
                 TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma,
-                (int)GetInputParameter("D Line"),
+                (int)GetInputParameter("slowPeriod"),
+                TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma,
+                (int)GetInputParameter("signalPeriod"),
                 TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma
-            );
+                );
 
-            AddIndicator("Stochastic", indStochastic);
-
+            var indAroon = new AroonIndicator(Bars.Bars, (int)GetInputParameter("aroonPeriod"));
+;
+            AddIndicator("MACD", indMACD);
+            AddIndicator("Aroon", indAroon);
         }
 
         /// <summary>
@@ -117,33 +119,24 @@ namespace stochastic_longs
         /// </summary>
         public override void OnNewBar()
         {
-            var indStochastic = (StochasticIndicator)GetIndicator("Stochastic");
+            var indMACD = (MACDExtIndicator)GetIndicator("MACD");
+            var indAroon = (AroonIndicator)GetIndicator("Aroon");
 
-            /* Estrategia:
-             *  Se basa en la línea del estocástico.
-             */
             if (GetOpenPosition() == 0)
             {
-                /* Si el estocástico se mantiene por encima de la línea superior N días, abrir long. */
-                if (indStochastic.GetD()[1] < indStochastic.GetLowerLine()[1] && indStochastic.GetD()[0] >= indStochastic.GetLowerLine()[0])
+                /* Cruce de MACD con Signal hacia arriba && que esté debajo de 0 */
+                if (indMACD.GetSignalAverage()[0] < 0 && indMACD.GetMACD()[1] < indMACD.GetSignalAverage()[1] && indMACD.GetMACD()[0] >= indMACD.GetSignalAverage()[0]) 
                 {
                     buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
                     this.InsertOrder(buyOrder);
-
-                    //stopLoss = Math.Truncate(GetFilledOrders()[0].FillPrice - (GetFilledOrders()[0].FillPrice * ((int)GetInputParameter("Ticks") / 10000D)));
-                    //stopLossOrder = new StopOrder(OrderSide.Sell, 1, stopLoss, "Saltó StopLoss inicial");
-                    //this.InsertOrder(stopLossOrder);
                 }
-            }
-            else if (GetOpenPosition() != 0)
+            }else
             {
-                /* Estocástico desciende a menos de la linea inferior, cerrar long. */
-                if (indStochastic.GetD()[1] > indStochastic.GetUpperLine()[1] && indStochastic.GetD()[0] <= indStochastic.GetUpperLine()[0])
+                /* Cruce de MACD con signal hacia abajo  */
+                if (indMACD.GetMACD()[1] > indMACD.GetSignalAverage()[1] && indMACD.GetMACD()[0] <= indMACD.GetSignalAverage()[0])
                 {
-                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Estocástico entró en rango de nuevo, close long");
+                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Aroon Up < 75, close long");
                     this.InsertOrder(sellOrder);
-
-                    //this.CancelOrder(stopLossOrder);
                 }
             }
         }

@@ -5,6 +5,7 @@ using TradingMotion.SDKv2.Markets.Indicators.OverlapStudies;
 using TradingMotion.SDKv2.Algorithms;
 using TradingMotion.SDKv2.Algorithms.InputParameters;
 using TradingMotion.SDKv2.Markets.Indicators.Momentum;
+using System;
 
 namespace aroon_longs
 {
@@ -14,8 +15,10 @@ namespace aroon_longs
     /// <remarks> 
     public class aroon_longs : Strategy
     {
-        Order buyOrder;
+        Order buyOrder, stopLossOrder;
         bool canOpenPosition = false;
+        double stopLoss = 0D;
+        double siguienteNivelStop = 0D;
 
         /// <summary>
         /// Strategy required constructor
@@ -85,6 +88,8 @@ namespace aroon_longs
 
                 new InputParameter("Porcentaje SL", -2D),
                 new InputParameter("Porcentaje TP", 5D),
+
+                new InputParameter("Ticks", 50),
             };
         }
 
@@ -135,23 +140,36 @@ namespace aroon_longs
                     buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
                     this.InsertOrder(buyOrder);
                     canOpenPosition = false;
+
+                    stopLoss = Math.Truncate(GetFilledOrders()[0].FillPrice - (GetFilledOrders()[0].FillPrice * ((int)GetInputParameter("Ticks") / 10000D)));
+                    stopLossOrder = new StopOrder(OrderSide.Sell, 1, stopLoss, "Saltó StopLoss inicial");
+                    this.InsertOrder(stopLossOrder);
                 }
             }
             else if (GetOpenPosition() != 0)
-            {
-                if (porcentajeMovimientoPrecio() <= (double)GetInputParameter("Porcentaje SL"))
-                {
-                    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "StopLoss, close long");
-                    this.InsertOrder(sellOrder);
-                    //log.Info(porcentajeMovimientoPrecio());
-                }
+            {      
+                //if (porcentajeMovimientoPrecio() <= (double)GetInputParameter("Porcentaje SL"))
+                //{
+                //    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "StopLoss, close long");
+                //    this.InsertOrder(sellOrder);
+                //    log.Info("Stoploss: " + porcentajeMovimientoPrecio().ToString("F2"));
+                //    this.CancelOrder(stopLossOrder);
+                //}
                 /* Si la línea Aroon Up desciende a menos de 75, cerrar long. */
-                else if (indAroon.GetAroonUp()[0] <= (int)GetInputParameter("Exit Operation Level"))
+                //if (indAroon.GetAroonUp()[0] <= (int)GetInputParameter("Exit Operation Level"))
+                //{
+                //    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Aroon Up < 75, close long");
+                //    this.InsertOrder(sellOrder);
+                //    this.CancelOrder(stopLossOrder);
+                //}
+                if (indAroon.GetAroonUp()[0] - indAroon.GetAroonDown()[0] >= (int)GetInputParameter("Exit Operation Level"))
                 {
                     Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Aroon Up < 75, close long");
                     this.InsertOrder(sellOrder);
+                    this.CancelOrder(stopLossOrder);
                 }
             }
+
         }
 
 
@@ -173,6 +191,20 @@ namespace aroon_longs
             }
 
             return porcentaje;
+        }
+
+        // Implementación de un trailing stop para la estrategia
+        protected void ajustarStopLoss(double siguienteNivelStop)
+        {
+            /* Cálculo del siguiente nivel propuesto para StopLoss */
+            siguienteNivelStop = stopLossOrder.Price + (stopLossOrder.Price * (int)GetInputParameter("Ticks") / 10000D);
+            /* Si el precio avanza más de X "Ticks", muevo SL [Por ejemplo Ticks=50 -> 0.50% de subida] */
+            if ((this.Bars.Close[0] / siguienteNivelStop) - 1 >= (int)GetInputParameter("Ticks") / 10000D)
+            {
+                stopLossOrder.Price = Math.Truncate(siguienteNivelStop);
+                stopLossOrder.Label = "Saltó StopLoss desplazado";
+                this.ModifyOrder(stopLossOrder);
+            }
         }
     }
 }
