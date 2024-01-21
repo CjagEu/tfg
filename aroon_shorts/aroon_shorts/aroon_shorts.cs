@@ -5,15 +5,18 @@ using TradingMotion.SDKv2.Markets.Indicators.OverlapStudies;
 using TradingMotion.SDKv2.Algorithms;
 using TradingMotion.SDKv2.Algorithms.InputParameters;
 using TradingMotion.SDKv2.Markets.Indicators.Momentum;
-using System;
 
-namespace aroon_longs
+namespace aroon_shorts
 {
     /// <summary> 
-    /// Aroon Longs Strategy
+    /// TradingMotion SDK Golden Cross Strategy
     /// </summary> 
     /// <remarks> 
-    public class aroon_longs : Strategy
+    /// The Golden Cross Strategy uses two moving averages, one with short period (called Fast) and the other with a longer period (called Slow).
+    /// When the fast avg crosses the slow avg from below it is called the "Golden Cross" and it is considered as a signal for a following bullish trend.
+    /// The strategy will open a Long position right after a "Golden Cross", and will go flat when the fast average crosses below the slow one.
+    /// </remarks> 
+    public class aroon_shorts : Strategy
     {
         Order buyOrder, sellOrder, stopLossOrder;
         bool canOpenPosition = false;
@@ -26,7 +29,7 @@ namespace aroon_longs
         /// </summary>
         /// <param Name="mainChart">The Chart over the Strategy will run</param>
         /// <param Name="secondaryCharts">Secondary charts that the Strategy can use</param>
-        public aroon_longs(Chart mainChart, List<Chart> secondaryCharts)
+        public aroon_shorts(Chart mainChart, List<Chart> secondaryCharts)
             : base(mainChart, secondaryCharts)
         {
 
@@ -38,7 +41,7 @@ namespace aroon_longs
         /// <returns>The complete name of the strategy</returns>
         public override string Name
         {
-            get { return "Aroon Longs Strategy"; }
+            get { return "Aroon Shorts Strategy"; }
         }
 
         /// <summary>
@@ -99,7 +102,7 @@ namespace aroon_longs
         /// </summary>
         public override void OnInitialize()
         {
-            log.Debug("Aroon Longs onInitialize()");
+            log.Debug("Aroon Shorts onInitialize()");
 
             var indAroon = new AroonIndicator(Bars.Bars, (int)GetInputParameter("Aroon Period"));
 
@@ -115,25 +118,25 @@ namespace aroon_longs
             var indAroon = (AroonIndicator)GetIndicator("Aroon");
 
             /* Condiciones de entrada:
-             *      Línea Up > 80 durante N días.
-             *      Línea Down < 30.
+             *      Línea Down > 80 durante N días.
+             *      Línea Up < 30.   
              *      
              * Condiciones de salida:
-             *      Línea Down > 80 durante N días.
-             *      Línea Up < 30.
+             *      Línea Up > 80 durante N días.
+             *      Línea Down < 30.
              */
             if (GetOpenPosition() == 0)
             {
-                /* Si durante N días la línea Aroon Up se ha mantenido por encima de 80, abrir posición. */
-                int counterOpen = 0;
+                /* Si durante N días la línea Aroon Down se ha mantenido por encima de 80, abrir posición. */
+                int counter = 0;
                 for (int i = 3; i >= 1; i--)
                 {
-                    if (indAroon.GetAroonUp()[i] >= 80)
+                    if (indAroon.GetAroonDown()[i] >= 80)
                     {
-                        counterOpen++;
+                        counter++;
                     }
                 }
-                if (counterOpen == 3)
+                if (counter == 3)
                 {
                     canOpenPosition = true;
                 }
@@ -143,10 +146,10 @@ namespace aroon_longs
                 //    this.InsertOrder(buyOrder);
                 //    canOpenPosition = false;
                 //}
-                if (canOpenPosition && indAroon.GetAroonUp()[0] >= 80 && indAroon.GetAroonDown()[0] <= 30)
+                if (canOpenPosition && indAroon.GetAroonDown()[0] >= 80 && indAroon.GetAroonUp()[0] <= 30)
                 {
-                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                    this.InsertOrder(buyOrder);
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend confirmed, open short");
+                    this.InsertOrder(sellOrder);
                     canOpenPosition = false;
 
                     //stopLoss = Math.Truncate(GetFilledOrders()[0].FillPrice - (GetFilledOrders()[0].FillPrice * ((int)GetInputParameter("Ticks") / 10000D)));
@@ -156,60 +159,27 @@ namespace aroon_longs
             }
             else if (GetOpenPosition() != 0)
             {
-                /* Si durante N días la línea Aroon Down se ha mantenido por encima de 80, cerrar posición. */
-                int counterClose = 0;
-                for (int i = 3; i >= 1; i--)
+                /* Si durante N días la línea Aroon Up se ha mantenido por encima de 80, cerrar posición. */
+                //for (int i = 3; i >= 1; i--)
+                //{
+                //    if (indAroon.GetAroonUp()[i] >= 80)
+                //    {
+                //        canClosePosition = true;
+                //    }
+                //}
+                //if (canClosePosition && indAroon.GetAroonUp()[0] >= 80 && indAroon.GetAroonDown()[0] <= 30)
+                //{
+                //    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Uptrend finished confirmed, close short");
+                //    this.InsertOrder(buyOrder);
+                //    canClosePosition = false;
+                //}
+                
+            /* Condición directa para salir de shorts ya que el mercado cae rápido siempre.*/
+            if (indAroon.GetAroonUp()[0] == 30)
                 {
-                    if (indAroon.GetAroonDown()[i] >= 80)
-                    {
-                        counterClose++;
-                    }
+                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Uptrend finished confirmed, close short");
+                    this.InsertOrder(buyOrder);
                 }
-                if (counterClose == 3)
-                {
-                    canClosePosition = true;
-                }
-                if (canClosePosition && indAroon.GetAroonDown()[0] >= 80 && indAroon.GetAroonUp()[0] <= 30)
-                {
-                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Uptrend finished confirmed, close long");
-                    this.InsertOrder(sellOrder);
-                    canClosePosition = false;
-                }
-            }
-        }
-
-
-        // Devuelve en porcentaje cuánto se ha movido el precio desde la entrada.
-        protected double porcentajeMovimientoPrecio()
-        {
-            double porcentaje = 0;
-
-            // Calcular la variación porcentual del precio con respecto a la entrada.
-            if (Bars.Close[0] > buyOrder.FillPrice)
-            {
-                // Precio actual por encima del precio de entrada.
-                porcentaje = ((Bars.Close[0] / buyOrder.FillPrice) - 1) * 100;
-            }
-            else if (Bars.Close[0] < buyOrder.FillPrice)
-            {
-                // Precio actual por debajo del precio de entrada.
-                porcentaje = ((Bars.Close[0] / buyOrder.FillPrice) - 1) * 100;
-            }
-
-            return porcentaje;
-        }
-
-        // Implementación de un trailing stop para la estrategia
-        protected void ajustarStopLoss(double siguienteNivelStop)
-        {
-            /* Cálculo del siguiente nivel propuesto para StopLoss */
-            siguienteNivelStop = stopLossOrder.Price + (stopLossOrder.Price * (int)GetInputParameter("Ticks") / 10000D);
-            /* Si el precio avanza más de X "Ticks", muevo SL [Por ejemplo Ticks=50 -> 0.50% de subida] */
-            if ((this.Bars.Close[0] / siguienteNivelStop) - 1 >= (int)GetInputParameter("Ticks") / 10000D)
-            {
-                stopLossOrder.Price = Math.Truncate(siguienteNivelStop);
-                stopLossOrder.Label = "Saltó StopLoss desplazado";
-                this.ModifyOrder(stopLossOrder);
             }
         }
     }

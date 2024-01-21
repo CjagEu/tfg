@@ -119,31 +119,28 @@ namespace stochastic_longs
         {
             var indStochastic = (StochasticIndicator)GetIndicator("Stochastic");
 
-            /* Estrategia:
-             *  Se basa en la línea del estocástico.
+            /* Condiciones de entrada:
+             *      Línea D corta hacia arriba a LowerLine.
+             *      
+             * Condiciones de salida:
+             *      Línea D corta hacia abajo a UpperLine.
              */
             if (GetOpenPosition() == 0)
             {
-                /* Si el estocástico se mantiene por encima de la línea superior N días, abrir long. */
+
                 if (indStochastic.GetD()[1] < indStochastic.GetLowerLine()[1] && indStochastic.GetD()[0] >= indStochastic.GetLowerLine()[0])
                 {
                     buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
                     this.InsertOrder(buyOrder);
-
-                    //stopLoss = Math.Truncate(GetFilledOrders()[0].FillPrice - (GetFilledOrders()[0].FillPrice * ((int)GetInputParameter("Ticks") / 10000D)));
-                    //stopLossOrder = new StopOrder(OrderSide.Sell, 1, stopLoss, "Saltó StopLoss inicial");
-                    //this.InsertOrder(stopLossOrder);
                 }
             }
             else if (GetOpenPosition() != 0)
             {
-                /* Estocástico desciende a menos de la linea inferior, cerrar long. */
+
                 if (indStochastic.GetD()[1] > indStochastic.GetUpperLine()[1] && indStochastic.GetD()[0] <= indStochastic.GetUpperLine()[0])
                 {
                     Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Estocástico entró en rango de nuevo, close long");
                     this.InsertOrder(sellOrder);
-
-                    //this.CancelOrder(stopLossOrder);
                 }
             }
         }
