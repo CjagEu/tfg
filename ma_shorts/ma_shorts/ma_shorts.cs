@@ -7,7 +7,7 @@ using TradingMotion.SDKv2.Algorithms.InputParameters;
 using System;
 using TradingMotion.SDKv2.Markets.Indicators.Volatility;
 
-namespace ma_longs
+namespace ma_shorts
 {
     /// <summary> 
     /// TradingMotion SDK Golden Cross Strategy
@@ -17,9 +17,9 @@ namespace ma_longs
     /// When the fast avg crosses the slow avg from below it is called the "Golden Cross" and it is considered as a signal for a following bullish trend.
     /// The strategy will open a Long position right after a "Golden Cross", and will go flat when the fast average crosses below the slow one.
     /// </remarks> 
-    public class ma_longs : Strategy
+    public class ma_shorts : Strategy
     {
-        Order buyOrder, sellOrder, StopOrder, exitLongOrder;
+        Order buyOrder, sellOrder, StopOrder, exitShortOrder;
         double stoplossInicial;
         bool breakevenFlag;
         int profitMultiplier;
@@ -29,7 +29,7 @@ namespace ma_longs
         /// </summary>
         /// <param Name="mainChart">The Chart over the Strategy will run</param>
         /// <param Name="secondaryCharts">Secondary charts that the Strategy can use</param>
-        public ma_longs(Chart mainChart, List<Chart> secondaryCharts)
+        public ma_shorts(Chart mainChart, List<Chart> secondaryCharts)
             : base(mainChart, secondaryCharts)
         {
 
@@ -41,7 +41,7 @@ namespace ma_longs
         /// <returns>The complete name of the strategy</returns>
         public override string Name
         {
-            get { return "MA Longs Strategy"; }
+            get { return "MA Shorts Strategy"; }
         }
 
         /// <summary>
@@ -98,7 +98,7 @@ namespace ma_longs
         /// </summary>
         public override void OnInitialize()
         {
-            log.Debug("MA Longs onInitialize()");
+            log.Debug("MA Shorts onInitialize()");
 
             var indLongSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Long Moving Average Period"));
             var indSlowSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Slow Moving Average Period"));
@@ -138,26 +138,27 @@ namespace ma_longs
 
             if (GetOpenPosition() == 0)
             {
-                if (indLongSma.GetAvSimple()[0] < indSlowSma.GetAvSimple()[0] && indSlowSma.GetAvSimple()[0] < indFastSma.GetAvSimple()[0])
+                if (indLongSma.GetAvSimple()[0] > indSlowSma.GetAvSimple()[0] && indSlowSma.GetAvSimple()[0] > indFastSma.GetAvSimple()[0])
                 {
-                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend confirmed, open short");
                     // trailingStopOrder = new StopOrder(OrderSide.Sell, 1, this.Bars.Close[0] - stopMargin, "Trailing stop long exit");
 
-                    stoplossInicial = Bars.Close[0] - (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));                        //* GetMainChart().Symbol.TickSize; // TODO
-                    StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
+                    stoplossInicial = Bars.Close[0] + (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));                        //* GetMainChart().Symbol.TickSize; // TODO
+                    StopOrder = new StopOrder(OrderSide.Buy, 1, stoplossInicial, "StopLoss triggered");
 
-                    this.InsertOrder(buyOrder);
+                    this.InsertOrder(sellOrder);
                     this.InsertOrder(StopOrder);
 
                     breakevenFlag = false;
 
                 }
-            }else if (GetOpenPosition() != 0)
+            }
+            else if (GetOpenPosition() != 0)
             {
                 //Precio sube 2%, stoplossinicial a BE
-                if(porcentajeMovimientoPrecio(buyOrder.FillPrice) > (double)GetInputParameter("Stoploss Ticks") && !breakevenFlag)
+                if (porcentajeMovimientoPrecio(sellOrder.FillPrice) > (double)GetInputParameter("Stoploss Ticks") && !breakevenFlag)
                 {
-                    StopOrder.Price = buyOrder.FillPrice + (GetMainChart().Symbol.TickSize * 100);
+                    StopOrder.Price = sellOrder.FillPrice - (GetMainChart().Symbol.TickSize * 100);
                     StopOrder.Label = "Breakeven triggered ******************";
                     this.ModifyOrder(StopOrder);
                     breakevenFlag = true;
@@ -173,12 +174,12 @@ namespace ma_longs
                     //    this.InsertOrder(exitLongOrder);
                     //    this.CancelOrder(StopOrder);
                     //}
-                    if (Bars.Close[0] <= indSlowSma.GetAvSimple()[0])
+                    if (Bars.Close[0] >= indSlowSma.GetAvSimple()[0])
                     {
                         // Cancelling the order and closing the position
-                        exitLongOrder = new MarketOrder(OrderSide.Sell, 1, "Exit long position");
+                        exitShortOrder = new MarketOrder(OrderSide.Buy, 1, "Exit short position");
 
-                        this.InsertOrder(exitLongOrder);
+                        this.InsertOrder(exitShortOrder);
                         this.CancelOrder(StopOrder);
                     }
                 }
