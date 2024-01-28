@@ -4,6 +4,7 @@ using TradingMotion.SDKv2.Markets.Orders;
 using TradingMotion.SDKv2.Markets.Indicators.OverlapStudies;
 using TradingMotion.SDKv2.Algorithms;
 using TradingMotion.SDKv2.Algorithms.InputParameters;
+using System;
 
 namespace ma_longs
 {
@@ -17,7 +18,11 @@ namespace ma_longs
     /// </remarks> 
     public class ma_longs : Strategy
     {
-        Order buyOrder, sellOrder;
+        Order buyOrder, sellOrder, StopOrder, exitLongOrder;
+        double stoplossInicial;
+        bool breakevenFlag;
+        int profitMultiplier;
+
         /// <summary>
         /// Strategy required constructor
         /// </summary>
@@ -82,7 +87,8 @@ namespace ma_longs
                 new InputParameter("Long Moving Average Period", 50),
                 new InputParameter("Slow Moving Average Period", 20),
                 new InputParameter("Fast Moving Average Period", 5),
-            };
+                new InputParameter("Stoploss Ticks", 0.50D),
+        };
         }
 
         /// <summary>
@@ -112,6 +118,7 @@ namespace ma_longs
             var indSlowSma = (SMAIndicator)GetIndicator("Slow SMA");
             var indLongSma = (SMAIndicator)GetIndicator("Long SMA");
 
+
             //if (GetOpenPosition() == 0)
             //{
             //    if (indFastSma.GetAvSimple()[1] < indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] >= indSlowSma.GetAvSimple()[0])
@@ -133,8 +140,84 @@ namespace ma_longs
             {
                 if (indLongSma.GetAvSimple()[0] < indSlowSma.GetAvSimple()[0] && indSlowSma.GetAvSimple()[0] < indFastSma.GetAvSimple()[0])
                 {
+                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
+                    // trailingStopOrder = new StopOrder(OrderSide.Sell, 1, this.Bars.Close[0] - stopMargin, "Trailing stop long exit");
+
+                    stoplossInicial = Bars.Close[0] - (Bars.Close[0] * 0.02);                        //* GetMainChart().Symbol.TickSize; // TODO
+                    StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
+
+                    this.InsertOrder(buyOrder);
+                    this.InsertOrder(StopOrder);
+
+                    breakevenFlag = false;
 
                 }
+            }else if (GetOpenPosition() != 0)
+            {
+                //Precio sube 2%, stoplossinicial a BE
+                if(porcentajeMovimientoPrecio(buyOrder.FillPrice) > (double)GetInputParameter("Stoploss Ticks") && !breakevenFlag)
+                {
+                    StopOrder.Price = buyOrder.FillPrice + (GetMainChart().Symbol.TickSize * 100);
+                    StopOrder.Label = "Breakeven triggered ******************";
+                    this.ModifyOrder(StopOrder);
+                    breakevenFlag = true;
+                    profitMultiplier = 2;
+                }
+                else
+                {
+                    //if (porcentajeMovimientoPrecio(StopOrder.Price) >= (double)GetInputParameter("Stoploss Ticks") * profitMultiplier)
+                    //{
+                    //    // Cancelling the order and closing the position
+                    //    exitLongOrder = new MarketOrder(OrderSide.Sell, 1, "Exit long position");
+
+                    //    this.InsertOrder(exitLongOrder);
+                    //    this.CancelOrder(StopOrder);
+                    //}
+                    if (Bars.Close[0] <= indSlowSma.GetAvSimple()[0])
+                    {
+                        // Cancelling the order and closing the position
+                        exitLongOrder = new MarketOrder(OrderSide.Sell, 1, "Exit long position");
+
+                        this.InsertOrder(exitLongOrder);
+                        this.CancelOrder(StopOrder);
+                    }
+                }
+            }
+        }
+
+
+        // Devuelve en porcentaje cuánto se ha movido el precio desde la entrada.
+        protected double porcentajeMovimientoPrecio(double precioOrigen)
+        {
+            double porcentaje = 0;
+
+            // Calcular la variación porcentual del precio con respecto a la entrada.
+            if (Bars.Close[0] > precioOrigen)
+            {
+                // Precio actual por encima del precio de entrada.
+                porcentaje = ((Bars.Close[0] / precioOrigen) - 1) * 100;
+            }
+            else if (Bars.Close[0] < precioOrigen)
+            {
+                // Precio actual por debajo del precio de entrada.
+                porcentaje = ((Bars.Close[0] / precioOrigen) - 1) * 100;
+            }
+
+            return porcentaje;
+        }
+
+
+        // Implementación de un trailing stop para la estrategia
+        protected void ajustarStopLoss(double siguienteNivelStop)
+        {
+            /* Cálculo del siguiente nivel propuesto para StopLoss */
+            siguienteNivelStop = StopOrder.Price + (StopOrder.Price * (int)GetInputParameter("Stoploss Ticks") / 100D);
+            /* Si el precio avanza más de X "Ticks", muevo SL [Por ejemplo Ticks=50 -> 0.50% de subida] */
+            if ((this.Bars.Close[0] / siguienteNivelStop) - 1 >= (int)GetInputParameter("Stoploss Ticks") / 100D)
+            {
+                StopOrder.Price = Math.Truncate(siguienteNivelStop);
+                StopOrder.Label = "Saltó StopLoss desplazado";
+                this.ModifyOrder(StopOrder);
             }
         }
     }
