@@ -5,7 +5,6 @@ using TradingMotion.SDKv2.Markets.Indicators.OverlapStudies;
 using TradingMotion.SDKv2.Algorithms;
 using TradingMotion.SDKv2.Algorithms.InputParameters;
 using System;
-using TradingMotion.SDKv2.Markets.Indicators.Volatility;
 
 namespace ma_longs
 {
@@ -19,10 +18,9 @@ namespace ma_longs
     /// </remarks> 
     public class ma_longs : Strategy
     {
-        Order buyOrder, sellOrder, StopOrder, exitLongOrder;
+        Order buyOrder, sellOrder, StopOrder;
         double stoplossInicial;
         bool breakevenFlag;
-        int profitMultiplier;
 
         /// <summary>
         /// Strategy required constructor
@@ -85,9 +83,9 @@ namespace ma_longs
         {
             return new InputParameterList
             {
-                new InputParameter("Long Moving Average Period", 50),
                 new InputParameter("Slow Moving Average Period", 20),
                 new InputParameter("Fast Moving Average Period", 5),
+
                 new InputParameter("Stoploss Ticks", 0.50D),
         };
         }
@@ -100,11 +98,9 @@ namespace ma_longs
         {
             log.Debug("MA Longs onInitialize()");
 
-            var indLongSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Long Moving Average Period"));
             var indSlowSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Slow Moving Average Period"));
             var indFastSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Fast Moving Average Period"));
 
-            AddIndicator("Long SMA", indLongSMA);
             AddIndicator("Slow SMA", indSlowSMA);
             AddIndicator("Fast SMA", indFastSMA);
         }
@@ -117,70 +113,36 @@ namespace ma_longs
         {
             var indFastSma = (SMAIndicator)GetIndicator("Fast SMA");
             var indSlowSma = (SMAIndicator)GetIndicator("Slow SMA");
-            var indLongSma = (SMAIndicator)GetIndicator("Long SMA");
-
-            //if (GetOpenPosition() == 0)
-            //{
-            //    if (indFastSma.GetAvSimple()[1] < indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] >= indSlowSma.GetAvSimple()[0])
-            //    {
-            //        buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-            //        this.InsertOrder(buyOrder);
-            //    }
-            //}
-            //else if(GetOpenPosition() != 0)
-            //{
-            //    if (indFastSma.GetAvSimple()[1] > indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] <= indSlowSma.GetAvSimple()[0])
-            //    {
-            //        sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend ended, close long");
-            //        this.InsertOrder(sellOrder);
-            //    }
-            //}
 
             if (GetOpenPosition() == 0)
             {
-                if (indLongSma.GetAvSimple()[0] < indSlowSma.GetAvSimple()[0] && indSlowSma.GetAvSimple()[0] < indFastSma.GetAvSimple()[0])
+                if (indFastSma.GetAvSimple()[1] < indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] >= indSlowSma.GetAvSimple()[0])
                 {
                     buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                    // trailingStopOrder = new StopOrder(OrderSide.Sell, 1, this.Bars.Close[0] - stopMargin, "Trailing stop long exit");
-
-                    stoplossInicial = Bars.Close[0] - (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));                        //* GetMainChart().Symbol.TickSize; // TODO
+                    stoplossInicial = Bars.Close[0] - (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));         //* GetMainChart().Symbol.TickSize;
                     StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
 
                     this.InsertOrder(buyOrder);
                     this.InsertOrder(StopOrder);
 
                     breakevenFlag = false;
-
                 }
-            }else if (GetOpenPosition() != 0)
+            }
+            else if (GetOpenPosition() != 0)
             {
-                //Precio sube 2%, stoplossinicial a BE
-                if(porcentajeMovimientoPrecio(buyOrder.FillPrice) > (double)GetInputParameter("Stoploss Ticks") && !breakevenFlag)
+                //Precio sube X%, stoplossinicial a BE
+                if (porcentajeMovimientoPrecio(buyOrder.FillPrice) > (double)GetInputParameter("Stoploss Ticks") && !breakevenFlag)
                 {
                     StopOrder.Price = buyOrder.FillPrice + (GetMainChart().Symbol.TickSize * 100);
                     StopOrder.Label = "Breakeven triggered ******************";
                     this.ModifyOrder(StopOrder);
                     breakevenFlag = true;
-                    profitMultiplier = 2;
                 }
-                else
+                else if (indFastSma.GetAvSimple()[1] > indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] <= indSlowSma.GetAvSimple()[0])
                 {
-                    //if (porcentajeMovimientoPrecio(StopOrder.Price) >= (double)GetInputParameter("Stoploss Ticks") * profitMultiplier)
-                    //{
-                    //    // Cancelling the order and closing the position
-                    //    exitLongOrder = new MarketOrder(OrderSide.Sell, 1, "Exit long position");
-
-                    //    this.InsertOrder(exitLongOrder);
-                    //    this.CancelOrder(StopOrder);
-                    //}
-                    if (Bars.Close[0] <= indSlowSma.GetAvSimple()[0])
-                    {
-                        // Cancelling the order and closing the position
-                        exitLongOrder = new MarketOrder(OrderSide.Sell, 1, "Exit long position");
-
-                        this.InsertOrder(exitLongOrder);
-                        this.CancelOrder(StopOrder);
-                    }
+                    this.CancelOrder(StopOrder);
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend ended, close long");
+                    this.InsertOrder(sellOrder);
                 }
             }
         }
