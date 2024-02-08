@@ -83,10 +83,11 @@ namespace ma_longs
         {
             return new InputParameterList
             {
-                new InputParameter("Slow Moving Average Period", 20),
-                new InputParameter("Fast Moving Average Period", 5),
+                new InputParameter("Slow Moving Average Period", 25),
+                new InputParameter("Fast Moving Average Period", 7),
 
-                new InputParameter("Stoploss Ticks", 0.50D),
+                new InputParameter("Stoploss Ticks", 2.0D),
+                new InputParameter("Breakeven Ticks", 2.0D),
         };
         }
 
@@ -131,7 +132,7 @@ namespace ma_longs
             else if (GetOpenPosition() != 0)
             {
                 //Precio sube X%, stoplossinicial a BE
-                if (porcentajeMovimientoPrecio(buyOrder.FillPrice) > (double)GetInputParameter("Stoploss Ticks") && !breakevenFlag)
+                if (porcentajeMovimientoPrecio(buyOrder.FillPrice) > (double)GetInputParameter("Breakeven Ticks") && !breakevenFlag)
                 {
                     StopOrder.Price = buyOrder.FillPrice + (GetMainChart().Symbol.TickSize * 100);
                     StopOrder.Label = "Breakeven triggered ******************";

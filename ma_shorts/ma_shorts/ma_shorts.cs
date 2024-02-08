@@ -19,10 +19,9 @@ namespace ma_shorts
     /// </remarks> 
     public class ma_shorts : Strategy
     {
-        Order buyOrder, sellOrder, StopOrder, exitShortOrder;
+        Order buyOrder, sellOrder, StopOrder;
         double stoplossInicial;
         bool breakevenFlag;
-        int profitMultiplier;
 
         /// <summary>
         /// Strategy required constructor
@@ -85,10 +84,12 @@ namespace ma_shorts
         {
             return new InputParameterList
             {
-                new InputParameter("Long Moving Average Period", 50),
-                new InputParameter("Slow Moving Average Period", 20),
-                new InputParameter("Fast Moving Average Period", 5),
-                new InputParameter("Stoploss Ticks", 0.50D),
+                new InputParameter("Slow Moving Average Period", 25),
+                new InputParameter("Fast Moving Average Period", 7),
+                new InputParameter("Filter Moving Average Period", 99),
+
+                new InputParameter("Stoploss Ticks", 2.0D),
+                new InputParameter("Breakeven Ticks", 2.0D),
         };
         }
 
@@ -100,11 +101,11 @@ namespace ma_shorts
         {
             log.Debug("MA Shorts onInitialize()");
 
-            var indLongSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Long Moving Average Period"));
             var indSlowSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Slow Moving Average Period"));
             var indFastSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Fast Moving Average Period"));
+            var indFilterSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Filter Moving Average Period"));
 
-            AddIndicator("Long SMA", indLongSMA);
+            AddIndicator("Filter SMA", indFilterSMA);
             AddIndicator("Slow SMA", indSlowSMA);
             AddIndicator("Fast SMA", indFastSMA);
         }
@@ -117,32 +118,13 @@ namespace ma_shorts
         {
             var indFastSma = (SMAIndicator)GetIndicator("Fast SMA");
             var indSlowSma = (SMAIndicator)GetIndicator("Slow SMA");
-            var indLongSma = (SMAIndicator)GetIndicator("Long SMA");
-
-            //if (GetOpenPosition() == 0)
-            //{
-            //    if (indFastSma.GetAvSimple()[1] < indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] >= indSlowSma.GetAvSimple()[0])
-            //    {
-            //        buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-            //        this.InsertOrder(buyOrder);
-            //    }
-            //}
-            //else if(GetOpenPosition() != 0)
-            //{
-            //    if (indFastSma.GetAvSimple()[1] > indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] <= indSlowSma.GetAvSimple()[0])
-            //    {
-            //        sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend ended, close long");
-            //        this.InsertOrder(sellOrder);
-            //    }
-            //}
+            var indFilterSma = (SMAIndicator)GetIndicator("Filter SMA");
 
             if (GetOpenPosition() == 0)
             {
-                if (indLongSma.GetAvSimple()[0] > indSlowSma.GetAvSimple()[0] && indSlowSma.GetAvSimple()[0] > indFastSma.GetAvSimple()[0])
+                if (indFastSma.GetAvSimple()[1] > indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] <= indSlowSma.GetAvSimple()[0] && indFilterSma.GetAvSimple()[0] > indSlowSma.GetAvSimple()[0])
                 {
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend confirmed, open short");
-                    // trailingStopOrder = new StopOrder(OrderSide.Sell, 1, this.Bars.Close[0] - stopMargin, "Trailing stop long exit");
-
                     stoplossInicial = Bars.Close[0] + (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));                        //* GetMainChart().Symbol.TickSize; // TODO
                     StopOrder = new StopOrder(OrderSide.Buy, 1, stoplossInicial, "StopLoss triggered");
 
@@ -150,38 +132,23 @@ namespace ma_shorts
                     this.InsertOrder(StopOrder);
 
                     breakevenFlag = false;
-
                 }
             }
             else if (GetOpenPosition() != 0)
             {
-                //Precio sube 2%, stoplossinicial a BE
-                if (porcentajeMovimientoPrecio(sellOrder.FillPrice) > (double)GetInputParameter("Stoploss Ticks") && !breakevenFlag)
+                //Precio sube X%, stoplossinicial a BE
+                if (porcentajeMovimientoPrecio(sellOrder.FillPrice) < ((double)GetInputParameter("Breakeven Ticks") * -1) && !breakevenFlag)
                 {
                     StopOrder.Price = sellOrder.FillPrice - (GetMainChart().Symbol.TickSize * 100);
                     StopOrder.Label = "Breakeven triggered ******************";
                     this.ModifyOrder(StopOrder);
                     breakevenFlag = true;
-                    profitMultiplier = 2;
                 }
-                else
+                else if (indFastSma.GetAvSimple()[1] < indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] >= indSlowSma.GetAvSimple()[0])
                 {
-                    //if (porcentajeMovimientoPrecio(StopOrder.Price) >= (double)GetInputParameter("Stoploss Ticks") * profitMultiplier)
-                    //{
-                    //    // Cancelling the order and closing the position
-                    //    exitLongOrder = new MarketOrder(OrderSide.Sell, 1, "Exit long position");
-
-                    //    this.InsertOrder(exitLongOrder);
-                    //    this.CancelOrder(StopOrder);
-                    //}
-                    if (Bars.Close[0] >= indSlowSma.GetAvSimple()[0])
-                    {
-                        // Cancelling the order and closing the position
-                        exitShortOrder = new MarketOrder(OrderSide.Buy, 1, "Exit short position");
-
-                        this.InsertOrder(exitShortOrder);
-                        this.CancelOrder(StopOrder);
-                    }
+                    this.CancelOrder(StopOrder);
+                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend ended, close short");
+                    this.InsertOrder(buyOrder);
                 }
             }
         }
