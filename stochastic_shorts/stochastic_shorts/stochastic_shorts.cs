@@ -7,21 +7,19 @@ using TradingMotion.SDKv2.Algorithms.InputParameters;
 using TradingMotion.SDKv2.Markets.Indicators.Momentum;
 using System;
 
-namespace aroon_shorts
+namespace stochastic_shorts
 {
     /// <summary> 
-    /// TradingMotion SDK Golden Cross Strategy
+    /// TradingMotion SDK Stochastic Shorts Strategy
     /// </summary> 
     /// <remarks> 
     /// The Golden Cross Strategy uses two moving averages, one with short period (called Fast) and the other with a longer period (called Slow).
     /// When the fast avg crosses the slow avg from below it is called the "Golden Cross" and it is considered as a signal for a following bullish trend.
     /// The strategy will open a Long position right after a "Golden Cross", and will go flat when the fast average crosses below the slow one.
     /// </remarks> 
-    public class aroon_shorts : Strategy
+    public class stochastic_shorts : Strategy
     {
         Order buyOrder, sellOrder, StopOrder;
-        bool canOpenPosition = false;
-        bool canClosePosition = false;
         double stoplossInicial;
         bool breakevenFlag;
 
@@ -30,7 +28,7 @@ namespace aroon_shorts
         /// </summary>
         /// <param Name="mainChart">The Chart over the Strategy will run</param>
         /// <param Name="secondaryCharts">Secondary charts that the Strategy can use</param>
-        public aroon_shorts(Chart mainChart, List<Chart> secondaryCharts)
+        public stochastic_shorts(Chart mainChart, List<Chart> secondaryCharts)
             : base(mainChart, secondaryCharts)
         {
 
@@ -42,7 +40,7 @@ namespace aroon_shorts
         /// <returns>The complete name of the strategy</returns>
         public override string Name
         {
-            get { return "Aroon Shorts Strategy"; }
+            get { return "Stochastic Shorts Strategy"; }
         }
 
         /// <summary>
@@ -86,19 +84,15 @@ namespace aroon_shorts
         {
             return new InputParameterList
             {
-                new InputParameter("Aroon Period", 25),
+                new InputParameter("K Line", 14),
+                new InputParameter("D Line", 3),
+                new InputParameter("Stochastic Upper Line", 80),
+                new InputParameter("Stochastic Lower Line", 20),
 
                 new InputParameter("Filter Moving Average Period", 99),
 
                 new InputParameter("Stoploss Ticks", 2.0D),
                 new InputParameter("Breakeven Ticks", 2.0D),
-
-                //new InputParameter("Wait Window", 5),
-
-                //new InputParameter("Porcentaje SL", -2D),
-                //new InputParameter("Porcentaje TP", 5D),
-
-                //new InputParameter("Ticks", 50),
             };
         }
 
@@ -108,13 +102,21 @@ namespace aroon_shorts
         /// </summary>
         public override void OnInitialize()
         {
-            log.Debug("Aroon Shorts onInitialize()");
+            log.Debug("StochasticShortsStrategy onInitialize()");
 
-            var indAroon = new AroonIndicator(Bars.Bars, (int)GetInputParameter("Aroon Period"));
+            var indStochastic = new StochasticIndicator(
+                Bars.Bars,
+                (int)GetInputParameter("K Line"),
+                (int)GetInputParameter("D Line"),
+                TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma,
+                (int)GetInputParameter("D Line"),
+                TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma
+            );
+
             var indFilterSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Filter Moving Average Period"));
 
             AddIndicator("Filter SMA", indFilterSMA);
-            AddIndicator("Aroon", indAroon);
+            AddIndicator("Stochastic", indStochastic);
         }
 
         /// <summary>
@@ -123,85 +125,38 @@ namespace aroon_shorts
         /// </summary>
         public override void OnNewBar()
         {
-            var indAroon = (AroonIndicator)GetIndicator("Aroon");
+            var indStochastic = (StochasticIndicator)GetIndicator("Stochastic");
             var indFilterSma = (SMAIndicator)GetIndicator("Filter SMA");
 
-            /* Condiciones de entrada:
-             *      Línea Down > 80 durante N días.
-             *      Línea Up < 30.   
-             *      
-             * Condiciones de salida:
-             *      Línea Up > 80 durante N días.
-             *      Línea Down < 30.
-             */
             if (GetOpenPosition() == 0)
             {
-                /* Si durante N días la línea Aroon Down se ha mantenido por encima de 80, abrir posición. */
-                int counter = 0;
-                for (int i = 3; i >= 1; i--)
-                {
-                    if (indAroon.GetAroonDown()[i] >= 80)
-                    {
-                        counter++;
-                    }
-                }
-                if (counter == 3)
-                {
-                    canOpenPosition = true;
-                }
-                //if (canOpenPosition)
-                //{
-                //    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                //    this.InsertOrder(buyOrder);
-                //    canOpenPosition = false;
-                //}
-                if (canOpenPosition && indAroon.GetAroonDown()[0] >= 80 && indAroon.GetAroonUp()[0] <= 30 && indFilterSma.GetAvSimple()[0] > Bars.Close[0])
+
+                if (indStochastic.GetD()[1] > (int)GetInputParameter("Stochastic Upper Line") && indStochastic.GetD()[0] <= (int)GetInputParameter("Stochastic Upper Line") && indFilterSma.GetAvSimple()[0] > Bars.Close[0])
                 {
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend confirmed, open short");
-                    stoplossInicial = Bars.Close[0] + (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));                        //* GetMainChart().Symbol.TickSize; // TODO
+                    stoplossInicial = Bars.Close[0] + (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));         //* GetMainChart().Symbol.TickSize;
                     StopOrder = new StopOrder(OrderSide.Buy, 1, stoplossInicial, "StopLoss triggered");
 
                     this.InsertOrder(sellOrder);
                     this.InsertOrder(StopOrder);
 
                     breakevenFlag = false;
-                    canOpenPosition = false;
-
-                    //stopLoss = Math.Truncate(GetFilledOrders()[0].FillPrice - (GetFilledOrders()[0].FillPrice * ((int)GetInputParameter("Ticks") / 10000D)));
-                    //stopLossOrder = new StopOrder(OrderSide.Sell, 1, stopLoss, "Saltó StopLoss inicial");
-                    //this.InsertOrder(stopLossOrder);
                 }
             }
             else if (GetOpenPosition() != 0)
             {
-                /* Si durante N días la línea Aroon Up se ha mantenido por encima de 80, cerrar posición. */
-                //for (int i = 3; i >= 1; i--)
-                //{
-                //    if (indAroon.GetAroonUp()[i] >= 80)
-                //    {
-                //        canClosePosition = true;
-                //    }
-                //}
-                //if (canClosePosition && indAroon.GetAroonUp()[0] >= 80 && indAroon.GetAroonDown()[0] <= 30)
-                //{
-                //    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Uptrend finished confirmed, close short");
-                //    this.InsertOrder(buyOrder);
-                //    canClosePosition = false;
-                //}
-
                 //Precio sube X%, stoplossinicial a BE
-                if (porcentajeMovimientoPrecio(sellOrder.FillPrice) < ((double)GetInputParameter("Breakeven Ticks") * -1) && !breakevenFlag)
+                if (porcentajeMovimientoPrecio(sellOrder.FillPrice) > ((double)GetInputParameter("Breakeven Ticks") * -1) && !breakevenFlag)
                 {
                     StopOrder.Price = sellOrder.FillPrice - (GetMainChart().Symbol.TickSize * 100);
                     StopOrder.Label = "Breakeven triggered ******************";
                     this.ModifyOrder(StopOrder);
                     breakevenFlag = true;
                 }
-                /* Condición directa para salir de shorts ya que el mercado cae rápido siempre.*/
-                else if (indAroon.GetAroonUp()[0] == 0)
+                else if (indStochastic.GetD()[1] > (int)GetInputParameter("Stochastic Lower Line") && indStochastic.GetD()[0] <= (int)GetInputParameter("Stochastic Lower Line"))
                 {
                     this.CancelOrder(StopOrder);
-                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Uptrend finished confirmed, close short");
+                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Estocástico entró en rango de nuevo, close short");
                     this.InsertOrder(buyOrder);
                 }
             }

@@ -5,6 +5,7 @@ using TradingMotion.SDKv2.Markets.Indicators.OverlapStudies;
 using TradingMotion.SDKv2.Markets.Indicators.Momentum;
 using TradingMotion.SDKv2.Algorithms;
 using TradingMotion.SDKv2.Algorithms.InputParameters;
+using System;
 
 namespace stochastic_rsi_longs
 {
@@ -18,7 +19,10 @@ namespace stochastic_rsi_longs
     /// </remarks> 
     public class stochastic_rsi_longs : Strategy
     {
-        Order buyOrder;
+        Order buyOrder, sellOrder, StopOrder;
+        double stoplossInicial;
+        bool breakevenFlag;
+
         /// <summary>
         /// Strategy required constructor
         /// </summary>
@@ -82,7 +86,14 @@ namespace stochastic_rsi_longs
             {
                 new InputParameter("timePeriod", 14),
                 new InputParameter("fastKPeriod", 4),
-                new InputParameter("fastDPeriod", 4)
+                new InputParameter("fastDPeriod", 4),
+
+                new InputParameter("LowerLine", 40),
+                new InputParameter("UpperLine", 90),
+                new InputParameter("Filter Moving Average Period", 99),
+
+                new InputParameter("Stoploss Ticks", 2.0D),
+                new InputParameter("Breakeven Ticks", 2.0D),
             };
         }
 
@@ -95,7 +106,9 @@ namespace stochastic_rsi_longs
             log.Debug("StochsticRSILongs onInitialize()");
 
             var indStochasticRSI = new StochasticRSIIndicator(source: Bars.Bars, timePeriod: 14, fastKPeriod: 5, fastDPeriod: 5, fastDMAType: TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma);
+            var indFilterSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Filter Moving Average Period"));
 
+            AddIndicator("Filter SMA", indFilterSMA);
             AddIndicator("StochasticRSI", indStochasticRSI);
         }
 
@@ -106,23 +119,74 @@ namespace stochastic_rsi_longs
         public override void OnNewBar()
         {
             var indStochasticRSI = (StochasticRSIIndicator)GetIndicator("StochasticRSI");
-
+            var indFilterSma = (SMAIndicator)GetIndicator("Filter SMA");
 
             if (GetOpenPosition() == 0)
             {
-                if (indStochasticRSI.GetD()[1] < indStochasticRSI.GetLowerLine()[0] && indStochasticRSI.GetD()[0] >= indStochasticRSI.GetLowerLine()[0])
+                if (indStochasticRSI.GetD()[1] < (int)GetInputParameter("LowerLine") && indStochasticRSI.GetD()[0] >= (int)GetInputParameter("LowerLine") && indFilterSma.GetAvSimple()[0] < Bars.Close[0])
                 {
                     buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
+                    stoplossInicial = Bars.Close[0] - (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));         //* GetMainChart().Symbol.TickSize;
+                    StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
+
                     this.InsertOrder(buyOrder);
+                    this.InsertOrder(StopOrder);
+
+                    breakevenFlag = false;
                 }
             }
             else if (GetOpenPosition() != 0)
             {
-                if (indStochasticRSI.GetD()[1] > indStochasticRSI.GetUpperLine()[0] && indStochasticRSI.GetD()[0] <= indStochasticRSI.GetUpperLine()[0])
+                //Precio sube X%, stoplossinicial a BE
+                if (porcentajeMovimientoPrecio(buyOrder.FillPrice) > (double)GetInputParameter("Breakeven Ticks") && !breakevenFlag)
                 {
-                    buyOrder = new MarketOrder(OrderSide.Sell, 1, "Trend ended, close long");
-                    this.InsertOrder(buyOrder);
+                    StopOrder.Price = buyOrder.FillPrice + (GetMainChart().Symbol.TickSize * 100);
+                    StopOrder.Label = "Breakeven triggered ******************";
+                    this.ModifyOrder(StopOrder);
+                    breakevenFlag = true;
                 }
+                else if (indStochasticRSI.GetD()[1] > (int)GetInputParameter("UpperLine") && indStochasticRSI.GetD()[0] <= (int)GetInputParameter("UpperLine"))
+                {
+                    this.CancelOrder(StopOrder);
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend ended, close long");
+                    this.InsertOrder(sellOrder);
+                }
+            }
+        }
+
+
+        // Devuelve en porcentaje cuánto se ha movido el precio desde la entrada.
+        protected double porcentajeMovimientoPrecio(double precioOrigen)
+        {
+            double porcentaje = 0;
+
+            // Calcular la variación porcentual del precio con respecto a la entrada.
+            if (Bars.Close[0] > precioOrigen)
+            {
+                // Precio actual por encima del precio de entrada.
+                porcentaje = ((Bars.Close[0] / precioOrigen) - 1) * 100;
+            }
+            else if (Bars.Close[0] < precioOrigen)
+            {
+                // Precio actual por debajo del precio de entrada.
+                porcentaje = ((Bars.Close[0] / precioOrigen) - 1) * 100;
+            }
+
+            return porcentaje;
+        }
+
+
+        // Implementación de un trailing stop para la estrategia
+        protected void ajustarStopLoss(double siguienteNivelStop)
+        {
+            /* Cálculo del siguiente nivel propuesto para StopLoss */
+            siguienteNivelStop = StopOrder.Price + (StopOrder.Price * (int)GetInputParameter("Stoploss Ticks") / 100D);
+            /* Si el precio avanza más de X "Ticks", muevo SL [Por ejemplo Ticks=50 -> 0.50% de subida] */
+            if ((this.Bars.Close[0] / siguienteNivelStop) - 1 >= (int)GetInputParameter("Stoploss Ticks") / 100D)
+            {
+                StopOrder.Price = Math.Truncate(siguienteNivelStop);
+                StopOrder.Label = "Saltó StopLoss desplazado";
+                this.ModifyOrder(StopOrder);
             }
         }
     }

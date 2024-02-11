@@ -6,7 +6,7 @@ using TradingMotion.SDKv2.Markets.Charts;
 using TradingMotion.SDKv2.Markets.Symbols;
 using TradingMotion.SDKv2.WebServices;
 
-namespace stochastic_longs
+namespace stochastic_rsi_shorts
 {
     class DebugBacktest
     {
@@ -37,7 +37,7 @@ namespace stochastic_longs
             TradingMotionAPIClient.Instance.SetUp("https://www.tradingmotion.com/api/webservice.asmx", ConfigurationManager.AppSettings["TradingMotionAPILogin"], ConfigurationManager.AppSettings["TradingMotionAPIPassword"]); //Enter your TradingMotion credentials on the app.config file
             HistoricalDataAPIClient.Instance.SetUp("https://barserver.tradingmotion.com/WSHistoricalDatav2/webservice.asmx");
 
-            var s = new stochastic_longs(new Chart(SymbolFactory.GetSymbol("NQ"), BarPeriodType.Day, 1), null);
+            var s = new stochastic_rsi_shorts(new Chart(SymbolFactory.GetSymbol("NQ"), BarPeriodType.Day, 1), null);
 
             DebugStrategy.RunBacktest(s, startBacktestDate, endBacktestDate);
 
