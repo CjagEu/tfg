@@ -84,7 +84,10 @@ namespace aroon_longs
             {
                 new InputParameter("Aroon Period", 25),
 
-                //new InputParameter("Wait Window", 5),
+                new InputParameter("Wait Window", 3),
+
+                new InputParameter("UpperLine", 80),
+                new InputParameter("LowerLine", 20)
 
                 //new InputParameter("Porcentaje SL", -2D),
                 //new InputParameter("Porcentaje TP", 5D),
@@ -126,14 +129,14 @@ namespace aroon_longs
             {
                 /* Si durante N días la línea Aroon Up se ha mantenido por encima de 80, abrir posición. */
                 int counterOpen = 0;
-                for (int i = 3; i >= 1; i--)
+                for (int i = (int)GetInputParameter("Wait Window"); i >= 1; i--)
                 {
-                    if (indAroon.GetAroonUp()[i] >= 80)
+                    if (indAroon.GetAroonUp()[i] >= (int)GetInputParameter("UpperLine"))
                     {
                         counterOpen++;
                     }
                 }
-                if (counterOpen == 3)
+                if (counterOpen == (int)GetInputParameter("Wait Window"))
                 {
                     canOpenPosition = true;
                 }
@@ -143,7 +146,7 @@ namespace aroon_longs
                 //    this.InsertOrder(buyOrder);
                 //    canOpenPosition = false;
                 //}
-                if (canOpenPosition && indAroon.GetAroonUp()[0] >= 80 && indAroon.GetAroonDown()[0] <= 30)
+                if (canOpenPosition && indAroon.GetAroonUp()[0] >= (int)GetInputParameter("UpperLine") && indAroon.GetAroonDown()[0] <= (int)GetInputParameter("LowerLine"))
                 {
                     buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
                     this.InsertOrder(buyOrder);
@@ -158,18 +161,18 @@ namespace aroon_longs
             {
                 /* Si durante N días la línea Aroon Down se ha mantenido por encima de 80, cerrar posición. */
                 int counterClose = 0;
-                for (int i = 3; i >= 1; i--)
+                for (int i = (int)GetInputParameter("Wait Window"); i >= 1; i--)
                 {
-                    if (indAroon.GetAroonDown()[i] >= 80)
+                    if (indAroon.GetAroonDown()[i] >= (int)GetInputParameter("UpperLine"))
                     {
                         counterClose++;
                     }
                 }
-                if (counterClose == 3)
+                if (counterClose == (int)GetInputParameter("Wait Window"))
                 {
                     canClosePosition = true;
                 }
-                if (canClosePosition && indAroon.GetAroonDown()[0] >= 80 && indAroon.GetAroonUp()[0] <= 30)
+                if (canClosePosition && indAroon.GetAroonDown()[0] >= (int)GetInputParameter("UpperLine") && indAroon.GetAroonUp()[0] <= (int)GetInputParameter("LowerLine"))
                 {
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "Uptrend finished confirmed, close long");
                     this.InsertOrder(sellOrder);
