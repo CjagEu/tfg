@@ -2,6 +2,7 @@
 using TradingMotion.SDKv2.Markets.Charts;
 using TradingMotion.SDKv2.Markets.Orders;
 using TradingMotion.SDKv2.Markets.Indicators.OverlapStudies;
+using TradingMotion.SDKv2.Markets.Indicators.Momentum;
 using TradingMotion.SDKv2.Algorithms;
 using TradingMotion.SDKv2.Algorithms.InputParameters;
 using System;
@@ -86,6 +87,9 @@ namespace ma_longs
                 new InputParameter("Slow Moving Average Period", 25),
                 new InputParameter("Fast Moving Average Period", 7),
 
+                new InputParameter("ADX Period", 14),
+                new InputParameter("ADX level", 20),
+
                 new InputParameter("Stoploss Ticks", 2.0D),
                 new InputParameter("Breakeven Ticks", 2.0D),
         };
@@ -101,9 +105,11 @@ namespace ma_longs
 
             var indSlowSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Slow Moving Average Period"));
             var indFastSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Fast Moving Average Period"));
+            var indFilterADX = new ADXIndicator(source: Bars.Bars, timePeriod: (int)GetInputParameter("ADX Period"));
 
             AddIndicator("Slow SMA", indSlowSMA);
             AddIndicator("Fast SMA", indFastSMA);
+            AddIndicator("Filter ADX", indFilterADX);
         }
 
         /// <summary>
@@ -114,19 +120,23 @@ namespace ma_longs
         {
             var indFastSma = (SMAIndicator)GetIndicator("Fast SMA");
             var indSlowSma = (SMAIndicator)GetIndicator("Slow SMA");
+            var indFilterADX = (ADXIndicator)GetIndicator("Filter ADX");
 
             if (GetOpenPosition() == 0)
             {
-                if (indFastSma.GetAvSimple()[1] < indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] >= indSlowSma.GetAvSimple()[0])
+                if (indFilterADX.GetADX()[0] > (int)GetInputParameter("ADX Level"))
                 {
-                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                    stoplossInicial = Bars.Close[0] - (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));         //* GetMainChart().Symbol.TickSize;
-                    StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
+                    if (indFastSma.GetAvSimple()[1] < indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] >= indSlowSma.GetAvSimple()[0])
+                    {
+                        buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
+                        stoplossInicial = Bars.Close[0] - (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));         //* GetMainChart().Symbol.TickSize;
+                        StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
 
-                    this.InsertOrder(buyOrder);
-                    this.InsertOrder(StopOrder);
+                        this.InsertOrder(buyOrder);
+                        this.InsertOrder(StopOrder);
 
-                    breakevenFlag = false;
+                        breakevenFlag = false;
+                    }
                 }
             }
             else if (GetOpenPosition() != 0)
