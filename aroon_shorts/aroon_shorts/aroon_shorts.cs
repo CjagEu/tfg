@@ -93,7 +93,10 @@ namespace aroon_shorts
                 new InputParameter("Stoploss Ticks", 2.0D),
                 new InputParameter("Breakeven Ticks", 2.0D),
 
-                //new InputParameter("Wait Window", 5),
+                new InputParameter("Wait Window", 3),
+
+                new InputParameter("UpperLine", 80),
+                new InputParameter("LowerLine", 20)
 
                 //new InputParameter("Porcentaje SL", -2D),
                 //new InputParameter("Porcentaje TP", 5D),
@@ -138,14 +141,14 @@ namespace aroon_shorts
             {
                 /* Si durante N días la línea Aroon Down se ha mantenido por encima de 80, abrir posición. */
                 int counter = 0;
-                for (int i = 3; i >= 1; i--)
+                for (int i = (int)GetInputParameter("Wait Window"); i >= 1; i--)
                 {
                     if (indAroon.GetAroonDown()[i] >= 80)
                     {
                         counter++;
                     }
                 }
-                if (counter == 3)
+                if (counter == (int)GetInputParameter("Wait Window"))
                 {
                     canOpenPosition = true;
                 }
@@ -155,7 +158,7 @@ namespace aroon_shorts
                 //    this.InsertOrder(buyOrder);
                 //    canOpenPosition = false;
                 //}
-                if (canOpenPosition && indAroon.GetAroonDown()[0] >= 80 && indAroon.GetAroonUp()[0] <= 30 && indFilterSma.GetAvSimple()[0] > Bars.Close[0])
+                if (canOpenPosition && indAroon.GetAroonDown()[0] >= (int)GetInputParameter("UpperLine") && indAroon.GetAroonUp()[0] <= (int)GetInputParameter("LowerLine") && indFilterSma.GetAvSimple()[0] > Bars.Close[0])
                 {
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend confirmed, open short");
                     stoplossInicial = Bars.Close[0] + (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));                        //* GetMainChart().Symbol.TickSize; // TODO
