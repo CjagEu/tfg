@@ -90,6 +90,11 @@ namespace aroon_shorts
 
                 new InputParameter("Filter Moving Average Period", 99),
 
+                new InputParameter("Wait Window", 3),
+
+                new InputParameter("UpperLine", 80),
+                new InputParameter("LowerLine", 20),
+
                 new InputParameter("Stoploss Ticks", 2.0D),
                 new InputParameter("Breakeven Ticks", 2.0D),
 
@@ -143,7 +148,7 @@ namespace aroon_shorts
                 int counter = 0;
                 for (int i = (int)GetInputParameter("Wait Window"); i >= 1; i--)
                 {
-                    if (indAroon.GetAroonDown()[i] >= 80)
+                    if (indAroon.GetAroonDown()[i] >= (int)GetInputParameter("UpperLine"))
                     {
                         counter++;
                     }
