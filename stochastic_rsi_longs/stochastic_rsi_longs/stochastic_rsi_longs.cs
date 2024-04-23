@@ -20,7 +20,7 @@ namespace stochastic_rsi_longs
     public class stochastic_rsi_longs : Strategy
     {
         Order buyOrder, sellOrder, StopOrder, takeProfitOrder;
-        double stoplossInicial, takeprofitlevel;
+        double stoplossInicial, takeprofitlevel, dineroPerdido, dineroGanado;
         bool breakevenFlag;
 
         /// <summary>
@@ -92,13 +92,8 @@ namespace stochastic_rsi_longs
 
                 new InputParameter("Filter Moving Average Period", 99),
 
-                new InputParameter("Filter ADX Period", 14),
-                new InputParameter("ADX Level", 20),
-     
-                new InputParameter("Stoploss Ticks", 2.0D),
-                new InputParameter("Breakeven Ticks", 2.0D),
-
-                new InputParameter("Ratio", 1.0D)
+                new InputParameter("Quantity SL", 5000),
+                new InputParameter("Quantity TP", 5000)
             };
         }
 
@@ -116,11 +111,12 @@ namespace stochastic_rsi_longs
                 fastDPeriod: (int)GetInputParameter("fastDPeriod"),
                 fastDMAType: TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma);
             var indFilterSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Filter Moving Average Period"));
-            var indFilterADX = new ADXIndicator(source: Bars.Bars, timePeriod: (int)GetInputParameter("Filter ADX Period"));
 
             AddIndicator("Filter SMA", indFilterSMA);
             AddIndicator("StochasticRSI", indStochasticRSI);
-            AddIndicator("Filter ADX", indFilterADX);
+
+            dineroGanado = 0;
+            dineroPerdido = 0;
         }
 
         /// <summary>
@@ -131,68 +127,53 @@ namespace stochastic_rsi_longs
         {
             var indStochasticRSI = (StochasticRSIIndicator)GetIndicator("StochasticRSI");
             var indFilterSMA = (SMAIndicator)GetIndicator("Filter SMA");
-            var indFilterADX = (ADXIndicator)GetIndicator("Filter ADX");
+
+            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Stop)
+            {
+                if (dineroPerdido != (GetFilledOrders()[0].FillPrice - buyOrder.FillPrice) * Symbol.PointValue)
+                {
+                    dineroPerdido = (GetFilledOrders()[0].FillPrice - buyOrder.FillPrice) * Symbol.PointValue;
+                    log.Warn("ORDEN STOP EJECUTADA! PIERDO: " + dineroPerdido);
+                }
+            }
+
+            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Market && GetFilledOrders()[0].Side == OrderSide.Sell)
+            {
+                if (dineroGanado != (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue)
+                {
+                    dineroGanado = (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue;
+                    log.Warn("PnL REALIZADO! GANO: " + dineroGanado);
+                }
+            }
 
             if (GetOpenPosition() == 0)
             {
                 // Filtro de SMA de tendencia
                 if (indFilterSMA.GetAvSimple()[0] < Bars.Close[0])
                 {
-                    //Filtro de ADX de volatilidad (Creciente? y mayor que cierto nivel)
-                    //if (indFilterADX.GetADX()[0] > (int)GetInputParameter("ADX Level"))
-                    //{
-                        // Trigger SRSI cruza RSI LowerLine
-                        if (indStochasticRSI.GetD()[1] < (int)GetInputParameter("RSI LowerLine") && indStochasticRSI.GetD()[0] >= (int)GetInputParameter("RSI LowerLine"))
-                        {
-                            buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                            //stoplossInicial = Bars.Close[0] - (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));         //* GetMainChart().Symbol.TickSize;
-               
-                            this.InsertOrder(buyOrder);
+                    // Trigger SRSI cruza RSI LowerLine
+                    if (indStochasticRSI.GetD()[1] < (int)GetInputParameter("RSI LowerLine") && indStochasticRSI.GetD()[0] >= (int)GetInputParameter("RSI LowerLine"))
+                    {
+                        buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
+                        this.InsertOrder(buyOrder);
 
-                            stoplossInicial = buyOrder.FillPrice - (buyOrder.FillPrice * ((double)GetInputParameter("Stoploss Ticks") / 100));
-                            //stoplossInicial = precioValido(indFilterSMA.GetAvSimple()[0]);
-                            StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");            
-                            this.InsertOrder(StopOrder);
+                        stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
+                        StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");            
+                        this.InsertOrder(StopOrder);
 
-                            breakevenFlag = false;
-                        }
-                    //}
+                        breakevenFlag = false;
+                    }
                 }
             }
             else if (GetOpenPosition() != 0)
             {
-                //                StopOrder.Price = indFilterSMA.GetAvSimple()[0];
-                //                StopOrder.Label = "Precio toca Filter SMA";
-                //                this.ModifyOrder(StopOrder);
-
-                //Precio sube X%, stoplossinicial a BE
-//                if (porcentajeMovimientoPrecio(buyOrder.FillPrice) > (double)GetInputParameter("Breakeven Ticks") && !breakevenFlag)
-//                {
-//                    StopOrder.Price = buyOrder.FillPrice + (GetMainChart().Symbol.TickSize * 100);
-//                    StopOrder.Label = "Breakeven triggered ******************";
-//                    this.ModifyOrder(StopOrder);
-//                    breakevenFlag = true;
-//                }
-//                if (indStochasticRSI.GetD()[1] > (int)GetInputParameter("RSI UpperLine") && indStochasticRSI.GetD()[0] <= (int)GetInputParameter("RSI UpperLine"))
-//                {
-//                    this.CancelOrder(StopOrder);
-//                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend ended, close long");
-//                    this.InsertOrder(sellOrder);
-//                }
-                takeprofitlevel = precioValido(buyOrder.FillPrice + ((buyOrder.FillPrice - StopOrder.Price) * (double)GetInputParameter("Ratio"))); // RR 1:3 (por ejemplo)
+                takeprofitlevel = precioValido(calcularNivelPrecioParaTakeProfit(cantidadDinero: (int)GetInputParameter("Quantity TP")));
                 if (Bars.Close[0] >= takeprofitlevel)
                 {
                     this.CancelOrder(StopOrder);
-                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit triggered RR 1:3");
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit reached");
                     this.InsertOrder(sellOrder);
-
                 }
-//                else if(indFilterADX.GetADX()[0] < (int)GetInputParameter("ADX Level"))
-//                {
-//                    this.CancelOrder(StopOrder);
-//                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Poca volatilidad, se termina tendencia");
-//                    this.InsertOrder(sellOrder);
-//                }
             }
         }
 
@@ -243,6 +224,36 @@ namespace stochastic_rsi_longs
                 precioValido += ajuste;
             }
             return precioValido;
+        }
+
+        //Devuelve el nivel de precio al que se debe ejecutar una orden para que se pierda la cantidadDinero pasada como parámetro.
+        protected double calcularNivelPrecioParaStopLoss(int cantidadDinero)
+        {
+            //TODO HACER ESTA FUNCIÓN QUE DEVUELVA EL NIVEL DEL PRECIO AL QUE SE DEBE COLOCAR LA ORDEN DE STOPLOSS PARA PERDER LA cantidadDinero PASA COMO PARÁMETRO (SERÁ UN INPUT PARAMETER LUEGO)
+            // El argumento cantidadDinero debe ser en términos absolutos, es decir si digo de perder 1000, es 1000 no -1000.
+            // Renombrar la 'i' y cambiar lo de devolver 0.
+            for (double i = Bars.Close[0]; i > 0; i-=5)
+            {
+                if((buyOrder.FillPrice - i) * 20 >= cantidadDinero)
+                {
+                    return i;
+                }
+            }
+            return 0;
+        }
+
+        //Devuelve el nivel de precio al que se debe ejecutar una orden para que se gane la cantidadDinero pasada como parámetro.
+        protected double calcularNivelPrecioParaTakeProfit(int cantidadDinero)
+        {
+            // Renombrar la 'i' y cambiar lo de devolver 0.
+            for (double i = Bars.Close[0]; i < i * 5; i += 5)
+            {
+                if((i - buyOrder.FillPrice) * 20 >= cantidadDinero)
+                {
+                    return i;
+                }
+            }
+            return 0;
         }
     }
 }

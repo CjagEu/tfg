@@ -20,7 +20,7 @@ namespace stochastic_rsi_shorts
     public class stochastic_rsi_shorts : Strategy
     {
         Order buyOrder, sellOrder, StopOrder;
-        double stoplossInicial;
+        double stoplossInicial, takeprofitlevel;
         bool breakevenFlag;
 
         /// <summary>
@@ -92,8 +92,8 @@ namespace stochastic_rsi_shorts
                 new InputParameter("UpperLine", 80),
                 new InputParameter("Filter Moving Average Period", 99),
 
-                new InputParameter("Stoploss Ticks", 2.0D),
-                new InputParameter("Breakeven Ticks", 2.0D),
+                new InputParameter("Quantity SL", 5000),
+                new InputParameter("Quantity TP", 5000),
             };
         }
 
@@ -126,10 +126,12 @@ namespace stochastic_rsi_shorts
                 if (indStochasticRSI.GetD()[0] >= (int)GetInputParameter("UpperLine") && indFilterSma.GetAvSimple()[0] > Bars.Close[0])
                 {
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend confirmed, open short");
-                    stoplossInicial = Bars.Close[0] + (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));         //* GetMainChart().Symbol.TickSize;
-                    StopOrder = new StopOrder(OrderSide.Buy, 1, stoplossInicial, "StopLoss triggered");
-
                     this.InsertOrder(sellOrder);
+
+                    //stoplossInicial = Bars.Close[0] + (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));         //* GetMainChart().Symbol.TickSize;
+                    stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss((int)GetInputParameter("Quantity SL")));
+                    StopOrder = new StopOrder(OrderSide.Buy, 1, stoplossInicial, "StopLoss triggered");
+                
                     this.InsertOrder(StopOrder);
 
                     breakevenFlag = false;
@@ -138,19 +140,27 @@ namespace stochastic_rsi_shorts
             else if (GetOpenPosition() != 0)
             {
                 //Precio sube X%, stoplossinicial a BE
-                if (porcentajeMovimientoPrecio(sellOrder.FillPrice) > ((double)GetInputParameter("Breakeven Ticks") * -1) && !breakevenFlag)
-                {
-                    StopOrder.Price = sellOrder.FillPrice - (GetMainChart().Symbol.TickSize * 100);
-                    StopOrder.Label = "Breakeven triggered ******************";
-                    this.ModifyOrder(StopOrder);
-                    breakevenFlag = true;
-                }
-                else if (indStochasticRSI.GetD()[1] < (int)GetInputParameter("LowerLine") && indStochasticRSI.GetD()[0] >= (int)GetInputParameter("LowerLine"))
+//                if (porcentajeMovimientoPrecio(sellOrder.FillPrice) > ((double)GetInputParameter("Breakeven Ticks") * -1) && !breakevenFlag)
+//                {
+//                    StopOrder.Price = sellOrder.FillPrice - (GetMainChart().Symbol.TickSize * 100);
+//                    StopOrder.Label = "Breakeven triggered ******************";
+//                    this.ModifyOrder(StopOrder);
+//                    breakevenFlag = true;
+//                }
+//                else if (indStochasticRSI.GetD()[1] < (int)GetInputParameter("LowerLine") && indStochasticRSI.GetD()[0] >= (int)GetInputParameter("LowerLine"))
+//                {
+//                    this.CancelOrder(StopOrder);
+//                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend ended, close short");
+//                    this.InsertOrder(buyOrder);
+//                }
+                takeprofitlevel = precioValido(calcularNivelPrecioParaTakeProfit(cantidadDinero: (int)GetInputParameter("Quantity TP")));
+                if (Bars.Close[0] <= takeprofitlevel)
                 {
                     this.CancelOrder(StopOrder);
-                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend ended, close short");
+                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "TakeProfit reached");
                     this.InsertOrder(buyOrder);
                 }
+
             }
         }
 
@@ -187,6 +197,49 @@ namespace stochastic_rsi_shorts
                 StopOrder.Label = "Saltó StopLoss desplazado";
                 this.ModifyOrder(StopOrder);
             }
+        }
+
+        // Convierte el precio dado para que sea valido para el Symbol.
+        protected double precioValido(double precio)
+        {
+            double resto = precio % GetMainChart().Symbol.TickSize;
+            double precioValido = precio;
+            if (resto != 0)
+            {
+                double ajuste = GetMainChart().Symbol.TickSize - resto;
+                precioValido += ajuste;
+            }
+            return precioValido;
+        }
+
+        //Devuelve el nivel de precio al que se debe ejecutar una orden para que se pierda la cantidadDinero pasada como parámetro.
+        protected double calcularNivelPrecioParaStopLoss(int cantidadDinero)
+        {
+            //TODO HACER ESTA FUNCIÓN QUE DEVUELVA EL NIVEL DEL PRECIO AL QUE SE DEBE COLOCAR LA ORDEN DE STOPLOSS PARA PERDER LA cantidadDinero PASA COMO PARÁMETRO (SERÁ UN INPUT PARAMETER LUEGO)
+            // El argumento cantidadDinero debe ser en términos absolutos, es decir si digo de perder 1000, es 1000 no -1000.
+            // Renombrar la 'i' y cambiar lo de devolver 0.
+            for (double i = Bars.Close[0]; i > 0; i += 5)
+            {
+                if ((i - sellOrder.FillPrice) * 20 >= cantidadDinero)
+                {
+                    return i;
+                }
+            }
+            return 0;
+        }
+
+        //Devuelve el nivel de precio al que se debe ejecutar una orden para que se gane la cantidadDinero pasada como parámetro.
+        protected double calcularNivelPrecioParaTakeProfit(int cantidadDinero)
+        {
+            // Renombrar la 'i' y cambiar lo de devolver 0.
+            for (double i = Bars.Close[0]; i < i * 5; i -= 5)
+            {
+                if ((sellOrder.FillPrice - i) * 20 >= cantidadDinero)
+                {
+                    return i;
+                }
+            }
+            return 0;
         }
     }
 }
