@@ -21,7 +21,6 @@ namespace stochastic_rsi_longs
     {
         Order buyOrder, sellOrder, StopOrder, takeProfitOrder;
         double stoplossInicial, takeprofitlevel, dineroPerdido, dineroGanado;
-        bool breakevenFlag;
 
         /// <summary>
         /// Strategy required constructor
@@ -88,7 +87,6 @@ namespace stochastic_rsi_longs
                 new InputParameter("fastKPeriod", 4),
                 new InputParameter("fastDPeriod", 4),
                 new InputParameter("RSI LowerLine", 40),
-                new InputParameter("RSI UpperLine", 90),
 
                 new InputParameter("Filter Moving Average Period", 99),
 
@@ -117,6 +115,7 @@ namespace stochastic_rsi_longs
 
             dineroGanado = 0;
             dineroPerdido = 0;
+            takeprofitlevel = -1;
         }
 
         /// <summary>
@@ -128,23 +127,8 @@ namespace stochastic_rsi_longs
             var indStochasticRSI = (StochasticRSIIndicator)GetIndicator("StochasticRSI");
             var indFilterSMA = (SMAIndicator)GetIndicator("Filter SMA");
 
-            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Stop)
-            {
-                if (dineroPerdido != (GetFilledOrders()[0].FillPrice - buyOrder.FillPrice) * Symbol.PointValue)
-                {
-                    dineroPerdido = (GetFilledOrders()[0].FillPrice - buyOrder.FillPrice) * Symbol.PointValue;
-                    log.Warn("ORDEN STOP EJECUTADA! PIERDO: " + dineroPerdido);
-                }
-            }
-
-            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Market && GetFilledOrders()[0].Side == OrderSide.Sell)
-            {
-                if (dineroGanado != (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue)
-                {
-                    dineroGanado = (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue;
-                    log.Warn("PnL REALIZADO! GANO: " + dineroGanado);
-                }
-            }
+            imprimirOrdenStop();
+            imprimirOrdenLong();
 
             if (GetOpenPosition() == 0)
             {
@@ -160,23 +144,28 @@ namespace stochastic_rsi_longs
                         stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
                         StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");            
                         this.InsertOrder(StopOrder);
-
-                        breakevenFlag = false;
                     }
                 }
             }
             else if (GetOpenPosition() != 0)
             {
-                takeprofitlevel = precioValido(calcularNivelPrecioParaTakeProfit(cantidadDinero: (int)GetInputParameter("Quantity TP")));
-                if (Bars.Close[0] >= takeprofitlevel)
+                if (indFilterSMA.GetAvSimple()[0] >= Bars.Close[0])
                 {
                     this.CancelOrder(StopOrder);
-                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit reached");
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Filter signal cancelled the long.");
+                    this.InsertOrder(sellOrder);
+                }
+
+                if (activarTakeProfit())
+                {
+                    this.CancelOrder(StopOrder);
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit reached, profit: " + precioValido((Bars.Close[0] - buyOrder.FillPrice) * 20).ToString());
                     this.InsertOrder(sellOrder);
                 }
             }
         }
 
+        //*******************************************************************************************************************************************************//
 
         // Devuelve en porcentaje cuánto se ha movido el precio desde la entrada.
         protected double porcentajeMovimientoPrecio(double precioOrigen)
@@ -242,18 +231,55 @@ namespace stochastic_rsi_longs
             return 0;
         }
 
-        //Devuelve el nivel de precio al que se debe ejecutar una orden para que se gane la cantidadDinero pasada como parámetro.
-        protected double calcularNivelPrecioParaTakeProfit(int cantidadDinero)
+        //TODO Devuelve el nivel de precio al que se debe ejecutar una orden para que se gane la cantidadDinero pasada como parámetro.
+        protected bool activarTakeProfit()
         {
-            // Renombrar la 'i' y cambiar lo de devolver 0.
-            for (double i = Bars.Close[0]; i < i * 5; i += 5)
+            if ((Bars.Close[0] - buyOrder.FillPrice) * 20 >= (int)GetInputParameter("Quantity TP"))
             {
-                if((i - buyOrder.FillPrice) * 20 >= cantidadDinero)
+                return true;   
+            }
+            return false;
+        }
+
+        //Loggear si se ha ejecutado una orden Stop.
+        protected void imprimirOrdenStop()
+        {
+            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Stop)
+            {
+                if (dineroPerdido != (GetFilledOrders()[0].FillPrice - buyOrder.FillPrice) * Symbol.PointValue)
                 {
-                    return i;
+                    dineroPerdido = (GetFilledOrders()[0].FillPrice - buyOrder.FillPrice) * Symbol.PointValue;
+                    log.Error("StopLoss  Ejecutado! Pierdo: " + Math.Truncate(dineroPerdido));
                 }
             }
-            return 0;
+        }
+
+        //Loggear si se ha ejectuado una orden Long
+        protected void imprimirOrdenLong()
+        {
+            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Market && GetFilledOrders()[0].Side == OrderSide.Sell)
+            {
+                if (dineroGanado != (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue)
+                {
+                    dineroGanado = (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue;
+                    if (sellOrder.Label == "Filter signal cancelled the long.")
+                    {
+                        if (dineroGanado > 0)
+                        {
+                            log.Warn("Filtro cancela long! Gano: " + Math.Truncate(dineroGanado));
+                        }
+                        else
+                        {
+                            log.Warn("Filtro cancela long!            Pierdo: " + Math.Truncate(dineroGanado));
+                        }
+
+                    }
+                    else
+                    {
+                        log.Info("LongOrder Ejecutada! Gano: " + Math.Truncate(dineroGanado));
+                    }
+                }
+            }
         }
     }
 }

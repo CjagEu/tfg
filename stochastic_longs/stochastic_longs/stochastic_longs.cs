@@ -19,8 +19,7 @@ namespace stochastic_longs
     public class stochastic_longs : Strategy
     {
         Order buyOrder, sellOrder, StopOrder;
-        double stoplossInicial;
-        bool breakevenFlag;
+        double stoplossInicial, dineroPerdido, dineroGanado;
 
         /// <summary>
         /// Strategy required constructor
@@ -86,13 +85,12 @@ namespace stochastic_longs
             {
                 new InputParameter("K Line", 14),
                 new InputParameter("D Line", 3),
-                new InputParameter("Stochastic Upper Line", 80),
                 new InputParameter("Stochastic Lower Line", 20),
 
                 new InputParameter("Filter Moving Average Period", 99),
 
-                new InputParameter("Stoploss Ticks", 2.0D),
-                new InputParameter("Breakeven Ticks", 2.0D),
+                new InputParameter("Quantity SL", 5000),
+                new InputParameter("Quantity TP", 5000),
             };
         }
 
@@ -118,6 +116,9 @@ namespace stochastic_longs
             AddIndicator("Filter SMA", indFilterSMA);
             AddIndicator("Stochastic", indStochastic);
 
+            dineroGanado = 0;
+            dineroPerdido = 0;
+
         }
 
         /// <summary>
@@ -127,43 +128,47 @@ namespace stochastic_longs
         public override void OnNewBar()
         {
             var indStochastic = (StochasticIndicator)GetIndicator("Stochastic");
-            var indFilterSma = (SMAIndicator)GetIndicator("Filter SMA");
+            var indFilterSMA = (SMAIndicator)GetIndicator("Filter SMA");
 
             /* Condiciones de entrada:
-             *      Línea D corta hacia arriba a LowerLine.
-             *      
-             * Condiciones de salida:
-             *      Línea D corta hacia abajo a UpperLine.
+             *      Línea D corta hacia arriba a LowerLine.     
              */
+
+            imprimirOrdenStop();
+            imprimirOrdenLong();
+
             if (GetOpenPosition() == 0)
             {
 
-                if (indStochastic.GetD()[1] < (int)GetInputParameter("Stochastic Lower Line") && indStochastic.GetD()[0] >= (int)GetInputParameter("Stochastic Lower Line") && indFilterSma.GetAvSimple()[0] < Bars.Close[0])
+                if (indStochastic.GetD()[1] < (int)GetInputParameter("Stochastic Lower Line") && indStochastic.GetD()[0] >= (int)GetInputParameter("Stochastic Lower Line") && indFilterSMA.GetAvSimple()[0] < Bars.Close[0])
                 {
                     buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                    stoplossInicial = Bars.Close[0] - (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));         //* GetMainChart().Symbol.TickSize;
-                    StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
-
                     this.InsertOrder(buyOrder);
-                    this.InsertOrder(StopOrder);
 
-                    breakevenFlag = false;
+                    stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
+                    StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");         
+                    this.InsertOrder(StopOrder);
                 }
             }
             else if (GetOpenPosition() != 0)
             {
-                //Precio sube X%, stoplossinicial a BE
-                if (porcentajeMovimientoPrecio(buyOrder.FillPrice) > (double)GetInputParameter("Breakeven Ticks") && !breakevenFlag)
-                {
-                    StopOrder.Price = buyOrder.FillPrice + (GetMainChart().Symbol.TickSize * 100);
-                    StopOrder.Label = "Breakeven triggered ******************";
-                    this.ModifyOrder(StopOrder);
-                    breakevenFlag = true;
-                }
-                else if (indStochastic.GetD()[1] > (int)GetInputParameter("Stochastic Upper Line") && indStochastic.GetD()[0] <= (int)GetInputParameter("Stochastic Upper Line"))
+                //if (indStochastic.GetD()[1] > (int)GetInputParameter("Stochastic Upper Line") && indStochastic.GetD()[0] <= (int)GetInputParameter("Stochastic Upper Line"))
+                //{
+                //    this.CancelOrder(StopOrder);
+                //    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Estocástico entró en rango de nuevo, close long");
+                //    this.InsertOrder(sellOrder);
+                //}
+                if (indFilterSMA.GetAvSimple()[0] >= Bars.Close[0])
                 {
                     this.CancelOrder(StopOrder);
-                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Estocástico entró en rango de nuevo, close long");
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Filter signal cancelled the long.");
+                    this.InsertOrder(sellOrder);
+                }
+
+                if (activarTakeProfit())
+                {
+                    this.CancelOrder(StopOrder);
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit reached, profit: " + precioValido((Bars.Close[0] - buyOrder.FillPrice) * 20).ToString());
                     this.InsertOrder(sellOrder);
                 }
             }
@@ -190,7 +195,6 @@ namespace stochastic_longs
             return porcentaje;
         }
 
-
         // Implementación de un trailing stop para la estrategia
         protected void ajustarStopLoss(double siguienteNivelStop)
         {
@@ -202,6 +206,86 @@ namespace stochastic_longs
                 StopOrder.Price = Math.Truncate(siguienteNivelStop);
                 StopOrder.Label = "Saltó StopLoss desplazado";
                 this.ModifyOrder(StopOrder);
+            }
+        }
+
+        // Convierte el precio dado para que sea valido para el Symbol.
+        protected double precioValido(double precio)
+        {
+            double resto = precio % GetMainChart().Symbol.TickSize;
+            double precioValido = precio;
+            if (resto != 0)
+            {
+                double ajuste = GetMainChart().Symbol.TickSize - resto;
+                precioValido += ajuste;
+            }
+            return precioValido;
+        }
+
+        //Devuelve el nivel de precio al que se debe ejecutar una orden para que se pierda la cantidadDinero pasada como parámetro.
+        protected double calcularNivelPrecioParaStopLoss(int cantidadDinero)
+        {
+            //TODO HACER ESTA FUNCIÓN QUE DEVUELVA EL NIVEL DEL PRECIO AL QUE SE DEBE COLOCAR LA ORDEN DE STOPLOSS PARA PERDER LA cantidadDinero PASA COMO PARÁMETRO (SERÁ UN INPUT PARAMETER LUEGO)
+            // El argumento cantidadDinero debe ser en términos absolutos, es decir si digo de perder 1000, es 1000 no -1000.
+            // Renombrar la 'i' y cambiar lo de devolver 0.
+            for (double i = Bars.Close[0]; i > 0; i -= 5)
+            {
+                if ((buyOrder.FillPrice - i) * 20 >= cantidadDinero)
+                {
+                    return i;
+                }
+            }
+            return 0;
+        }
+
+        //TODO Devuelve el nivel de precio al que se debe ejecutar una orden para que se gane la cantidadDinero pasada como parámetro.
+        protected bool activarTakeProfit()
+        {
+            if ((Bars.Close[0] - buyOrder.FillPrice) * 20 >= (int)GetInputParameter("Quantity TP"))
+            {
+                return true;
+            }
+            return false;
+        }
+
+        //Loggear si se ha ejecutado una orden Stop.
+        protected void imprimirOrdenStop()
+        {
+            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Stop)
+            {
+                if (dineroPerdido != (GetFilledOrders()[0].FillPrice - buyOrder.FillPrice) * Symbol.PointValue)
+                {
+                    dineroPerdido = (GetFilledOrders()[0].FillPrice - buyOrder.FillPrice) * Symbol.PointValue;
+                    log.Error("StopLoss  Ejecutado! Pierdo: " + Math.Truncate(dineroPerdido));
+                }
+            }
+        }
+
+        //Loggear si se ha ejectuado una orden Long
+        protected void imprimirOrdenLong()
+        {
+            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Market && GetFilledOrders()[0].Side == OrderSide.Sell)
+            {
+                if (dineroGanado != (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue)
+                {
+                    dineroGanado = (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue;
+                    if (sellOrder.Label == "Filter signal cancelled the long.")
+                    {
+                        if (dineroGanado > 0)
+                        {
+                            log.Warn("Filtro cancela long! Gano: " + Math.Truncate(dineroGanado));
+                        }
+                        else
+                        {
+                            log.Warn("Filtro cancela long!            Pierdo: " + Math.Truncate(dineroGanado));
+                        }
+
+                    }
+                    else
+                    {
+                        log.Info("LongOrder Ejecutada! Gano: " + Math.Truncate(dineroGanado));
+                    }
+                }
             }
         }
     }
