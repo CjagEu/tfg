@@ -87,6 +87,8 @@ namespace macd_longs
                 new InputParameter("slowPeriod", 26),
                 new InputParameter("signalPeriod", 9),
 
+                new InputParameter("Filter SMA Period", 99),
+
                 new InputParameter("Quantity SL", 5000),
                 new InputParameter("Quantity TP", 5000),
             };
@@ -110,7 +112,10 @@ namespace macd_longs
                 TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma
                 );
 
+            var indFilterSMA = new SMAIndicator(source: Bars.Close, period: (int)GetInputParameter("Filter SMA Period"));
+
             AddIndicator("MACD", indMACD);
+            AddIndicator("Filter SMA", indFilterSMA);
 
             dineroGanado = 0;
             dineroPerdido = 0;
@@ -123,21 +128,26 @@ namespace macd_longs
         public override void OnNewBar()
         {
             var indMACD = (MACDExtIndicator)GetIndicator("MACD");
+            var indFilterSMA = (SMAIndicator)GetIndicator("Filter SMA");
 
             imprimirOrdenStop();
             imprimirOrdenLong();
 
             if (GetOpenPosition() == 0)
             {
-                /* Cruce de MACD con Signal hacia arriba && que esté debajo de 0 */
-                if (indMACD.GetSignalAverage()[0] < 0 && indMACD.GetMACD()[1] < indMACD.GetSignalAverage()[1] && indMACD.GetMACD()[0] >= indMACD.GetSignalAverage()[0]) 
+                // Filtro de SMA por debajo de las velas
+                if (indFilterSMA.GetAvSimple()[0] < Bars.Close[0])
                 {
-                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Cross up MACD line with Signal, open long");
-                    this.InsertOrder(buyOrder);
+                    /* Cruce de MACD con Signal hacia arriba && que esté debajo de 0 */
+                    if (indMACD.GetSignalAverage()[0] < 0 && indMACD.GetMACD()[1] < indMACD.GetSignalAverage()[1] && indMACD.GetMACD()[0] >= indMACD.GetSignalAverage()[0])
+                    {
+                        buyOrder = new MarketOrder(OrderSide.Buy, 1, "Cross up MACD line with Signal, open long");
+                        this.InsertOrder(buyOrder);
 
-                    stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
-                    StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
-                    this.InsertOrder(StopOrder);
+                        stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
+                        StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
+                        this.InsertOrder(StopOrder);
+                    }
                 }
             }else if (GetOpenPosition() != 0)
             {
@@ -148,7 +158,13 @@ namespace macd_longs
                 //    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Cross down MACD line with Signal, close long");
                 //    this.InsertOrder(sellOrder);
                 //}
-                if (activarTakeProfit())
+                if (indFilterSMA.GetAvSimple()[0] >= Bars.Close[0])
+                {
+                    this.CancelOrder(StopOrder);
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Filter signal cancelled the long.");
+                    this.InsertOrder(sellOrder);
+                }
+                else if (activarTakeProfit())
                 {
                     this.CancelOrder(StopOrder);
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit reached, profit: " + precioValido((Bars.Close[0] - buyOrder.FillPrice) * 20).ToString());

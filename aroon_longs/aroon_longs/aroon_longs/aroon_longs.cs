@@ -92,7 +92,7 @@ namespace aroon_longs
                 //new InputParameter("Porcentaje SL", -2D),
                 //new InputParameter("Porcentaje TP", 5D),
 
-                //new InputParameter("Ticks", 50),
+                //new InputParameter("", 50),Ticks
             };
         }
 
@@ -140,21 +140,11 @@ namespace aroon_longs
                 {
                     canOpenPosition = true;
                 }
-                //if (canOpenPosition)
-                //{
-                //    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                //    this.InsertOrder(buyOrder);
-                //    canOpenPosition = false;
-                //}
                 if (canOpenPosition && indAroon.GetAroonUp()[0] >= (int)GetInputParameter("UpperLine") && indAroon.GetAroonDown()[0] <= (int)GetInputParameter("LowerLine"))
                 {
                     buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
                     this.InsertOrder(buyOrder);
                     canOpenPosition = false;
-
-                    //stopLoss = Math.Truncate(GetFilledOrders()[0].FillPrice - (GetFilledOrders()[0].FillPrice * ((int)GetInputParameter("Ticks") / 10000D)));
-                    //stopLossOrder = new StopOrder(OrderSide.Sell, 1, stopLoss, "Saltó StopLoss inicial");
-                    //this.InsertOrder(stopLossOrder);
                 }
             }
             else if (GetOpenPosition() != 0)

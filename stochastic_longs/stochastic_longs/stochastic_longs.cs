@@ -164,8 +164,7 @@ namespace stochastic_longs
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "Filter signal cancelled the long.");
                     this.InsertOrder(sellOrder);
                 }
-
-                if (activarTakeProfit())
+                else if (activarTakeProfit())
                 {
                     this.CancelOrder(StopOrder);
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit reached, profit: " + precioValido((Bars.Close[0] - buyOrder.FillPrice) * 20).ToString());
