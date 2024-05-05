@@ -12,7 +12,7 @@ namespace stochastic_longs
     /// <summary> 
     /// Stochastic Longs Strategy
     /// </summary> 
-    /// <remarks> d
+    /// <remarks>
     /// The Aroon Stochastic Longs Strategy uses the Aroon indicator to filter de market and the Stochastic Oscillator indicator
     /// to open only longs trades as trigger.
     /// </remarks> 
@@ -83,14 +83,14 @@ namespace stochastic_longs
         {
             return new InputParameterList
             {
-                new InputParameter("K Line", 14),
-                new InputParameter("D Line", 3),
-                new InputParameter("Stochastic Lower Line", 20),
+                new InputParameter("K Line", 15),
+                new InputParameter("D Line", 1),
+                new InputParameter("Stochastic Lower Line", 50),
 
-                new InputParameter("Filter Moving Average Period", 99),
+                new InputParameter("Filter Moving Average Period", 140),
 
-                new InputParameter("Quantity SL", 5000),
-                new InputParameter("Quantity TP", 5000),
+                new InputParameter("Quantity SL", 4000),
+                new InputParameter("Quantity TP", 7000),
             };
         }
 
@@ -118,7 +118,6 @@ namespace stochastic_longs
 
             dineroGanado = 0;
             dineroPerdido = 0;
-
         }
 
         /// <summary>
@@ -130,49 +129,44 @@ namespace stochastic_longs
             var indStochastic = (StochasticIndicator)GetIndicator("Stochastic");
             var indFilterSMA = (SMAIndicator)GetIndicator("Filter SMA");
 
-            /* Condiciones de entrada:
-             *      Línea D corta hacia arriba a LowerLine.     
-             */
-
-            imprimirOrdenStop();
-            imprimirOrdenLong();
+            //imprimirOrdenStop();
+            //imprimirOrdenLong();
 
             if (GetOpenPosition() == 0)
             {
-
-                if (indStochastic.GetD()[1] < (int)GetInputParameter("Stochastic Lower Line") && indStochastic.GetD()[0] >= (int)GetInputParameter("Stochastic Lower Line") && indFilterSMA.GetAvSimple()[0] < Bars.Close[0])
+                // Filtro de tendencia SMA
+                if (indFilterSMA.GetAvSimple()[0] < Bars.Close[0])
                 {
-                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                    this.InsertOrder(buyOrder);
+                    // Condicion de entrada Linea D corta hacia arriba a LowerLine
+                    if (indStochastic.GetD()[1] < (int)GetInputParameter("Stochastic Lower Line") && indStochastic.GetD()[0] >= (int)GetInputParameter("Stochastic Lower Line"))
+                    {
+                        buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
+                        InsertOrder(buyOrder);
 
-                    stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
-                    StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");         
-                    this.InsertOrder(StopOrder);
+                        stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
+                        StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
+                        InsertOrder(StopOrder);
+                    }
                 }
             }
             else if (GetOpenPosition() != 0)
             {
-                //if (indStochastic.GetD()[1] > (int)GetInputParameter("Stochastic Upper Line") && indStochastic.GetD()[0] <= (int)GetInputParameter("Stochastic Upper Line"))
-                //{
-                //    this.CancelOrder(StopOrder);
-                //    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Estocástico entró en rango de nuevo, close long");
-                //    this.InsertOrder(sellOrder);
-                //}
                 if (indFilterSMA.GetAvSimple()[0] >= Bars.Close[0])
                 {
-                    this.CancelOrder(StopOrder);
+                    CancelOrder(StopOrder);
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "Filter signal cancelled the long.");
-                    this.InsertOrder(sellOrder);
+                    InsertOrder(sellOrder);
                 }
                 else if (activarTakeProfit())
                 {
-                    this.CancelOrder(StopOrder);
+                    CancelOrder(StopOrder);
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit reached, profit: " + precioValido((Bars.Close[0] - buyOrder.FillPrice) * 20).ToString());
-                    this.InsertOrder(sellOrder);
+                    InsertOrder(sellOrder);
                 }
             }
         }
 
+        //*******************************************************************************************************************************************************//
 
         // Devuelve en porcentaje cuánto se ha movido el precio desde la entrada.
         protected double porcentajeMovimientoPrecio(double precioOrigen)

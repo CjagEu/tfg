@@ -84,21 +84,16 @@ namespace aroon_stochastic_longs
         {
             return new InputParameterList
             {
-                new InputParameter("Aroon Period", 16),
+                new InputParameter("Aroon Period", 20),
 
-                new InputParameter("K Line", 13),
-                new InputParameter("D Line", 3),
-                new InputParameter("Stochastic Upper Line", 80),
-                new InputParameter("Stochastic Lower Line", 20),
+                new InputParameter("K Line", 5),
+                new InputParameter("D Line", 1),
+                new InputParameter("Stochastic UpperLine", 70),
 
-                new InputParameter("Filter SMA Period", 99),
+                new InputParameter("Filter SMA Period", 140),
 
-                new InputParameter("Factor Multiplier", 4),
-
-                new InputParameter("Wait Window", 5),
-
-                new InputParameter("Quantity SL", 5000),
-                new InputParameter("Quantity TP", 5000),
+                new InputParameter("Quantity SL", 3000),
+                new InputParameter("Quantity TP", 4000),
             };
         }
 
@@ -141,8 +136,8 @@ namespace aroon_stochastic_longs
             var indStochastic = (StochasticIndicator)GetIndicator("Stochastic");
             var indFilterSMA = (SMAIndicator)GetIndicator("Filter SMA");
 
-            imprimirOrdenStop();
-            imprimirOrdenLong();
+            //imprimirOrdenStop();
+            //imprimirOrdenLong();
 
             /* Estrategia conservadora:
              *      Filtro de tendencia: Linea Up de Aroon mayor que 75
@@ -150,24 +145,28 @@ namespace aroon_stochastic_longs
              */
             if (GetOpenPosition() == 0)
             {
-                /*Filtro con AroonUp */
-                if (indAroon.GetAroonUp()[0] >= 75)
+                //Filtro SMA
+                if (indFilterSMA.GetAvSimple()[0] < Bars.Close[0])
                 {
-                    if (indStochastic.GetD()[0] > indStochastic.GetUpperLine()[0])
+                    /*Filtro con AroonUp */
+                    if (indAroon.GetAroonUp()[0] >= 75)
                     {
-                        /*Estaba originalmente, tampoco iba mal...*/
-                        //counter++;
-                        //if (counter == (int)GetInputParameter("Wait Window"))
-                        //{
-                        //    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                        //    this.InsertOrder(buyOrder);
-                        //}
-                        buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                        this.InsertOrder(buyOrder);
+                        if (indStochastic.GetD()[0] > (int)GetInputParameter("Stochastic UpperLine"))
+                        {
+                            /*Estaba originalmente, tampoco iba mal...*/
+                            //counter++;
+                            //if (counter == (int)GetInputParameter("Wait Window"))
+                            //{
+                            //    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
+                            //    this.InsertOrder(buyOrder);
+                            //}
+                            buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
+                            this.InsertOrder(buyOrder);
 
-                        stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
-                        StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
-                        this.InsertOrder(StopOrder);
+                            stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
+                            StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
+                            this.InsertOrder(StopOrder);
+                        }
                     }
                 }
             }

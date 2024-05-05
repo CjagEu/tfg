@@ -19,8 +19,8 @@ namespace stochastic_rsi_longs
     /// </remarks> 
     public class stochastic_rsi_longs : Strategy
     {
-        Order buyOrder, sellOrder, StopOrder, takeProfitOrder;
-        double stoplossInicial, takeprofitlevel, dineroPerdido, dineroGanado;
+        Order buyOrder, sellOrder, StopOrder;
+        double stoplossInicial, dineroPerdido, dineroGanado;
 
         /// <summary>
         /// Strategy required constructor
@@ -83,12 +83,13 @@ namespace stochastic_rsi_longs
         {
             return new InputParameterList
             {
-                new InputParameter("timePeriod", 14),
-                new InputParameter("fastKPeriod", 4),
-                new InputParameter("fastDPeriod", 4),
+                new InputParameter("timePeriod", 15),
+                new InputParameter("fastKPeriod", 17),
+                new InputParameter("fastDPeriod", 3),
+
                 new InputParameter("RSI LowerLine", 40),
 
-                new InputParameter("Filter Moving Average Period", 99),
+                new InputParameter("Filter MA Period", 120),
 
                 new InputParameter("Quantity SL", 5000),
                 new InputParameter("Quantity TP", 5000)
@@ -108,14 +109,13 @@ namespace stochastic_rsi_longs
                 fastKPeriod: (int)GetInputParameter("fastKPeriod"), 
                 fastDPeriod: (int)GetInputParameter("fastDPeriod"),
                 fastDMAType: TradingMotion.SDKv2.Markets.Indicators.MovingAverageType.Sma);
-            var indFilterSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Filter Moving Average Period"));
+            var indFilterSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Filter MA Period"));
 
             AddIndicator("Filter SMA", indFilterSMA);
             AddIndicator("StochasticRSI", indStochasticRSI);
 
             dineroGanado = 0;
             dineroPerdido = 0;
-            takeprofitlevel = -1;
         }
 
         /// <summary>
@@ -127,8 +127,8 @@ namespace stochastic_rsi_longs
             var indStochasticRSI = (StochasticRSIIndicator)GetIndicator("StochasticRSI");
             var indFilterSMA = (SMAIndicator)GetIndicator("Filter SMA");
 
-            imprimirOrdenStop();
-            imprimirOrdenLong();
+            //imprimirOrdenStop();
+            //imprimirOrdenLong();
 
             if (GetOpenPosition() == 0)
             {
@@ -139,11 +139,11 @@ namespace stochastic_rsi_longs
                     if (indStochasticRSI.GetD()[1] < (int)GetInputParameter("RSI LowerLine") && indStochasticRSI.GetD()[0] >= (int)GetInputParameter("RSI LowerLine"))
                     {
                         buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                        this.InsertOrder(buyOrder);
+                        InsertOrder(buyOrder);
 
                         stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
                         StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");            
-                        this.InsertOrder(StopOrder);
+                        InsertOrder(StopOrder);
                     }
                 }
             }
@@ -151,15 +151,15 @@ namespace stochastic_rsi_longs
             {
                 if (indFilterSMA.GetAvSimple()[0] >= Bars.Close[0])
                 {
-                    this.CancelOrder(StopOrder);
+                    CancelOrder(StopOrder);
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "Filter signal cancelled the long.");
-                    this.InsertOrder(sellOrder);
+                    InsertOrder(sellOrder);
                 }
                 else if (activarTakeProfit())
                 {
-                    this.CancelOrder(StopOrder);
+                    CancelOrder(StopOrder);
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit reached, profit: " + precioValido((Bars.Close[0] - buyOrder.FillPrice) * 20).ToString());
-                    this.InsertOrder(sellOrder);
+                    InsertOrder(sellOrder);
                 }
             }
         }
@@ -193,11 +193,11 @@ namespace stochastic_rsi_longs
             /* Cálculo del siguiente nivel propuesto para StopLoss */
             siguienteNivelStop = StopOrder.Price + (StopOrder.Price * (int)GetInputParameter("Stoploss Ticks") / 100D);
             /* Si el precio avanza más de X "Ticks", muevo SL [Por ejemplo Ticks=50 -> 0.50% de subida] */
-            if ((this.Bars.Close[0] / siguienteNivelStop) - 1 >= (int)GetInputParameter("Stoploss Ticks") / 100D)
+            if ((Bars.Close[0] / siguienteNivelStop) - 1 >= (int)GetInputParameter("Stoploss Ticks") / 100D)
             {
                 StopOrder.Price = Math.Truncate(siguienteNivelStop);
                 StopOrder.Label = "Saltó StopLoss desplazado";
-                this.ModifyOrder(StopOrder);
+                ModifyOrder(StopOrder);
             }
         }
         

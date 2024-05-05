@@ -31,7 +31,7 @@ namespace stochastic_shorts
              * REQUIRED CREDENTIALS: Edit your app.config and enter your login/password for accessing the TradingMotion API
             */
 
-            var startBacktestDate = DateTime.Parse(DateTime.Now.AddMonths(-150).AddDays(-1).ToShortDateString() + " 00:00:00");
+            var startBacktestDate = DateTime.Parse(DateTime.Now.AddMonths(-6).AddDays(-1).ToShortDateString() + " 00:00:00");
             var endBacktestDate = DateTime.Parse(DateTime.Now.AddDays(-1).ToShortDateString() + " 23:59:59");
 
             TradingMotionAPIClient.Instance.SetUp("https://www.tradingmotion.com/api/webservice.asmx", ConfigurationManager.AppSettings["TradingMotionAPILogin"], ConfigurationManager.AppSettings["TradingMotionAPIPassword"]); //Enter your TradingMotion credentials on the app.config file

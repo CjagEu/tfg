@@ -20,8 +20,7 @@ namespace macd_shorts
     public class macd_shorts : Strategy
     {
         Order buyOrder, sellOrder, StopOrder;
-        double stoplossInicial;
-        bool breakevenFlag;
+        double stoplossInicial, dineroPerdido, dineroGanado;
 
         /// <summary>
         /// Strategy required constructor
@@ -84,14 +83,14 @@ namespace macd_shorts
         {
             return new InputParameterList
             {
-                new InputParameter("fastPeriod", 12),
-                new InputParameter("slowPeriod", 26),
-                new InputParameter("signalPeriod", 9),
+                new InputParameter("fastPeriod", 10),
+                new InputParameter("slowPeriod", 15),
+                new InputParameter("signalPeriod", 25),
 
-                new InputParameter("Filter Moving Average Period", 99),
+                new InputParameter("Filter MA Period", 100),
 
-                new InputParameter("Stoploss Ticks", 2.0D),
-                new InputParameter("Breakeven Ticks", 2.0D),
+                new InputParameter("Quantity SL", 3000),
+                //new InputParameter("Quantity TP", 3000),
             };
         }
 
@@ -114,10 +113,13 @@ namespace macd_shorts
                 );
             ;
 
-            var indFilterSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Filter Moving Average Period"));
+            var indFilterSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Filter MA Period"));
 
             AddIndicator("Filter SMA", indFilterSMA);
             AddIndicator("MACD", indMACD);
+
+            dineroGanado = 0;
+            dineroPerdido = 0;
         }
 
         /// <summary>
@@ -129,41 +131,50 @@ namespace macd_shorts
             var indMACD = (MACDExtIndicator)GetIndicator("MACD");
             var indFilterSMA = (SMAIndicator)GetIndicator("Filter SMA");
 
+            //imprimirOrdenStop();
+            //imprimirOrdenShort();
+
             if (GetOpenPosition() == 0)
             {
-                /* Cruce de MACD con Signal hacia abajo && que esté encima de 0 */
-                if (indMACD.GetSignalAverage()[0] > 0 && indMACD.GetMACD()[1] > indMACD.GetSignalAverage()[1] && indMACD.GetMACD()[0] <= indMACD.GetSignalAverage()[0] && indFilterSMA.GetAvSimple()[0] > Bars.Close[0])
+                // Filtro de SMA
+                if (indFilterSMA.GetAvSimple()[0] > Bars.Close[0])
                 {
-                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Cross down MACD line with Signal, open short");
+                    /* Cruce de MACD con Signal hacia abajo && que esté encima de 0 */
+                    if (indMACD.GetSignalAverage()[0] > 0 && indMACD.GetMACD()[1] > indMACD.GetSignalAverage()[1] && indMACD.GetMACD()[0] <= indMACD.GetSignalAverage()[0])
+                    {
+                        sellOrder = new MarketOrder(OrderSide.Sell, 1, "Trend confirmed, open short");
+                        InsertOrder(sellOrder);
 
-                    stoplossInicial = Bars.Close[0] + (Bars.Close[0] * ((double)GetInputParameter("Stoploss Ticks") / 100));         //* GetMainChart().Symbol.TickSize;
-                    StopOrder = new StopOrder(OrderSide.Buy, 1, stoplossInicial, "StopLoss triggered");
-
-                    this.InsertOrder(sellOrder);
-                    this.InsertOrder(StopOrder);
-
-                    breakevenFlag = false;
+                        stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
+                        StopOrder = new StopOrder(OrderSide.Buy, 1, stoplossInicial, "StopLoss triggered");
+                        InsertOrder(StopOrder);
+                    }
                 }
             }
             else if (GetOpenPosition() != 0)
             {
-                //Precio sube X%, stoplossinicial a BE
-                if (porcentajeMovimientoPrecio(sellOrder.FillPrice) < ((double)GetInputParameter("Breakeven Ticks") * -1) && !breakevenFlag)
+                if (indFilterSMA.GetAvSimple()[0] <= Bars.Close[0])
                 {
-                    StopOrder.Price = sellOrder.FillPrice - (GetMainChart().Symbol.TickSize * 100);
-                    StopOrder.Label = "Breakeven triggered ******************";
-                    this.ModifyOrder(StopOrder);
-                    breakevenFlag = true;
+                    CancelOrder(StopOrder);
+                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Filter signal cancelled the short.");
+                    InsertOrder(buyOrder);
                 }
-                /* Cruce de MACD con signal hacia abajo  */
-                else if (indMACD.GetMACD()[1] < indMACD.GetSignalAverage()[1] && indMACD.GetMACD()[0] >= indMACD.GetSignalAverage()[0])
+                //else if (activarTakeProfit())
+                //{
+                //    CancelOrder(StopOrder);
+                //    buyOrder = new MarketOrder(OrderSide.Buy, 1, "TakeProfit reached, profit: " + precioValido((sellOrder.FillPrice - Bars.Close[0]) * 20).ToString());
+                //    InsertOrder(buyOrder);
+                //}
+                else if (indMACD.GetSignalAverage()[0] < 0 && indMACD.GetMACD()[1] < indMACD.GetSignalAverage()[1] && indMACD.GetMACD()[0] >= indMACD.GetSignalAverage()[0])
                 {
-                    this.CancelOrder(StopOrder);
-                    buyOrder = new MarketOrder(OrderSide.Buy, 1, "Cross up MACD line with Signal, close short");
-                    this.InsertOrder(buyOrder);
+                        CancelOrder(StopOrder);
+                        buyOrder = new MarketOrder(OrderSide.Buy, 1, "MACD Signal to close short: " + precioValido((sellOrder.FillPrice - Bars.Close[0]) * 20).ToString());
+                        InsertOrder(buyOrder);
                 }
             }
         }
+
+        //*******************************************************************************************************************************************************//
 
         // Devuelve en porcentaje cuánto se ha movido el precio desde la entrada.
         protected double porcentajeMovimientoPrecio(double precioOrigen)
@@ -185,6 +196,7 @@ namespace macd_shorts
             return porcentaje;
         }
 
+
         // Implementación de un trailing stop para la estrategia
         protected void ajustarStopLoss(double siguienteNivelStop)
         {
@@ -196,6 +208,86 @@ namespace macd_shorts
                 StopOrder.Price = Math.Truncate(siguienteNivelStop);
                 StopOrder.Label = "Saltó StopLoss desplazado";
                 this.ModifyOrder(StopOrder);
+            }
+        }
+
+        // Convierte el precio dado para que sea valido para el Symbol.
+        protected double precioValido(double precio)
+        {
+            double resto = precio % GetMainChart().Symbol.TickSize;
+            double precioValido = precio;
+            if (resto != 0)
+            {
+                double ajuste = GetMainChart().Symbol.TickSize - resto;
+                precioValido += ajuste;
+            }
+            return precioValido;
+        }
+
+        //Devuelve el nivel de precio al que se debe ejecutar una orden para que se pierda la cantidadDinero pasada como parámetro.
+        protected double calcularNivelPrecioParaStopLoss(int cantidadDinero)
+        {
+            //TODO HACER ESTA FUNCIÓN QUE DEVUELVA EL NIVEL DEL PRECIO AL QUE SE DEBE COLOCAR LA ORDEN DE STOPLOSS PARA PERDER LA cantidadDinero PASA COMO PARÁMETRO (SERÁ UN INPUT PARAMETER LUEGO)
+            // El argumento cantidadDinero debe ser en términos absolutos, es decir si digo de perder 1000, es 1000 no -1000.
+            // Renombrar la 'i' y cambiar lo de devolver 0.
+            for (double i = Bars.Close[0]; i > 0; i += 5)
+            {
+                if ((i - sellOrder.FillPrice) * 20 >= cantidadDinero)
+                {
+                    return i;
+                }
+            }
+            return 0;
+        }
+
+        //TODO Devuelve el nivel de precio al que se debe ejecutar una orden para que se gane la cantidadDinero pasada como parámetro.
+        protected bool activarTakeProfit()
+        {
+            if ((sellOrder.FillPrice - Bars.Close[0]) * 20 >= (int)GetInputParameter("Quantity TP"))
+            {
+                return true;
+            }
+            return false;
+        }
+
+        //Loggear si se ha ejecutado una orden Stop.
+        protected void imprimirOrdenStop()
+        {
+            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Stop)
+            {
+                if (dineroPerdido != (GetFilledOrders()[0].FillPrice - sellOrder.FillPrice) * Symbol.PointValue)
+                {
+                    dineroPerdido = (GetFilledOrders()[0].FillPrice - sellOrder.FillPrice) * Symbol.PointValue;
+                    log.Error("StopLoss  Ejecutado! Pierdo: " + Math.Truncate(dineroPerdido));
+                }
+            }
+        }
+
+        //Loggear si se ha ejectuado una orden Short
+        protected void imprimirOrdenShort()
+        {
+            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Market && GetFilledOrders()[0].Side == OrderSide.Buy)
+            {
+                if (dineroGanado != (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue)
+                {
+                    dineroGanado = (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue;
+                    if (buyOrder.Label == "Filter signal cancelled the short.")
+                    {
+                        if (dineroGanado > 0)
+                        {
+                            log.Warn("Filtro cancela short! Gano: " + Math.Truncate(dineroGanado));
+                        }
+                        else
+                        {
+                            log.Warn("Filtro cancela short!            Pierdo: " + Math.Truncate(dineroGanado));
+                        }
+
+                    }
+                    else
+                    {
+                        log.Info("ShortOrder Ejecutada! Gano: " + Math.Truncate(dineroGanado));
+                    }
+                }
             }
         }
     }

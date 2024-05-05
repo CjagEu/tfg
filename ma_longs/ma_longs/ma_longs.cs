@@ -83,13 +83,13 @@ namespace ma_longs
         {
             return new InputParameterList
             {
-                new InputParameter("Slow Moving Average Period", 25),
-                new InputParameter("Fast Moving Average Period", 7),
+                new InputParameter("Slow MA Period", 25),
+                new InputParameter("Fast MA Period", 5),
 
-                new InputParameter("ADX Period", 14),
-                new InputParameter("ADX level", 20),
+                new InputParameter("ADX Period", 15),
+                new InputParameter("ADX level", 15),
 
-                new InputParameter("Quantity SL", 3000),
+                new InputParameter("Quantity SL", 4000),
                 new InputParameter("Quantity TP", 6000),
         };
         }
@@ -102,8 +102,8 @@ namespace ma_longs
         {
             log.Debug("MA Longs onInitialize()");
 
-            var indSlowSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Slow Moving Average Period"));
-            var indFastSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Fast Moving Average Period"));
+            var indSlowSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Slow MA Period"));
+            var indFastSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Fast MA Period"));
             var indFilterADX = new ADXIndicator(source: Bars.Bars, timePeriod: (int)GetInputParameter("ADX Period"));
 
             AddIndicator("Slow SMA", indSlowSMA);
@@ -124,8 +124,8 @@ namespace ma_longs
             var indSlowSma = (SMAIndicator)GetIndicator("Slow SMA");
             var indFilterADX = (ADXIndicator)GetIndicator("Filter ADX");
 
-            imprimirOrdenStop();
-            imprimirOrdenLong();
+            //imprimirOrdenStop();
+            //imprimirOrdenLong();
 
             if (GetOpenPosition() == 0)
             {
@@ -135,11 +135,11 @@ namespace ma_longs
                     if (indFastSma.GetAvSimple()[1] < indSlowSma.GetAvSimple()[1] && indFastSma.GetAvSimple()[0] >= indSlowSma.GetAvSimple()[0])
                     {
                         buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                        this.InsertOrder(buyOrder);
+                        InsertOrder(buyOrder);
 
                         stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
                         StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
-                        this.InsertOrder(StopOrder);
+                        InsertOrder(StopOrder);
                     }
                 }
             }
@@ -159,9 +159,9 @@ namespace ma_longs
                 //}
                 if (activarTakeProfit())
                 {
-                    this.CancelOrder(StopOrder);
+                    CancelOrder(StopOrder);
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit reached, profit: " + precioValido((Bars.Close[0] - buyOrder.FillPrice) * 20).ToString());
-                    this.InsertOrder(sellOrder);
+                    InsertOrder(sellOrder);
                 }
             }
         }

@@ -83,14 +83,14 @@ namespace macd_longs
         {
             return new InputParameterList
             {
-                new InputParameter("fastPeriod", 12),
-                new InputParameter("slowPeriod", 26),
-                new InputParameter("signalPeriod", 9),
+                new InputParameter("fastPeriod", 15),
+                new InputParameter("slowPeriod", 45),
+                new InputParameter("signalPeriod", 13),
 
-                new InputParameter("Filter SMA Period", 99),
+                new InputParameter("Filter SMA Period", 130),
 
-                new InputParameter("Quantity SL", 5000),
-                new InputParameter("Quantity TP", 5000),
+                new InputParameter("Quantity SL", 4000),
+                new InputParameter("Quantity TP", 6000),
             };
         }
 
@@ -130,8 +130,8 @@ namespace macd_longs
             var indMACD = (MACDExtIndicator)GetIndicator("MACD");
             var indFilterSMA = (SMAIndicator)GetIndicator("Filter SMA");
 
-            imprimirOrdenStop();
-            imprimirOrdenLong();
+            //imprimirOrdenStop();
+            //imprimirOrdenLong();
 
             if (GetOpenPosition() == 0)
             {
@@ -142,33 +142,27 @@ namespace macd_longs
                     if (indMACD.GetSignalAverage()[0] < 0 && indMACD.GetMACD()[1] < indMACD.GetSignalAverage()[1] && indMACD.GetMACD()[0] >= indMACD.GetSignalAverage()[0])
                     {
                         buyOrder = new MarketOrder(OrderSide.Buy, 1, "Cross up MACD line with Signal, open long");
-                        this.InsertOrder(buyOrder);
+                        InsertOrder(buyOrder);
 
                         stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
                         StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
-                        this.InsertOrder(StopOrder);
+                        InsertOrder(StopOrder);
                     }
                 }
-            }else if (GetOpenPosition() != 0)
+            }
+            else if (GetOpenPosition() != 0)
             {
-                /* Cruce de MACD con signal hacia abajo  */
-                //if (indMACD.GetMACD()[1] > indMACD.GetSignalAverage()[1] && indMACD.GetMACD()[0] <= indMACD.GetSignalAverage()[0])
-                //{
-                //    this.CancelOrder(StopOrder);
-                //    Order sellOrder = new MarketOrder(OrderSide.Sell, 1, "Cross down MACD line with Signal, close long");
-                //    this.InsertOrder(sellOrder);
-                //}
                 if (indFilterSMA.GetAvSimple()[0] >= Bars.Close[0])
                 {
-                    this.CancelOrder(StopOrder);
+                    CancelOrder(StopOrder);
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "Filter signal cancelled the long.");
-                    this.InsertOrder(sellOrder);
+                    InsertOrder(sellOrder);
                 }
                 else if (activarTakeProfit())
                 {
-                    this.CancelOrder(StopOrder);
+                    CancelOrder(StopOrder);
                     sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit reached, profit: " + precioValido((Bars.Close[0] - buyOrder.FillPrice) * 20).ToString());
-                    this.InsertOrder(sellOrder);
+                    InsertOrder(sellOrder);
                 }
             }
         }

@@ -15,11 +15,10 @@ namespace aroon_longs
     /// <remarks> 
     public class aroon_longs : Strategy
     {
-        Order buyOrder, sellOrder, stopLossOrder;
-        bool canOpenPosition = false;
-        bool canClosePosition = false;
-        double stopLoss = 0D;
-        double siguienteNivelStop = 0D;
+        Order buyOrder, sellOrder, StopOrder;
+        double stoplossInicial, dineroPerdido, dineroGanado;
+        bool canOpenPosition;
+        bool canClosePosition;
 
         /// <summary>
         /// Strategy required constructor
@@ -82,17 +81,17 @@ namespace aroon_longs
         {
             return new InputParameterList
             {
-                new InputParameter("Aroon Period", 25),
+                new InputParameter("Aroon Period", 20),
 
                 new InputParameter("Wait Window", 3),
 
+                new InputParameter("Filter MA Period", 140),
+
                 new InputParameter("UpperLine", 80),
-                new InputParameter("LowerLine", 20)
+                new InputParameter("LowerLine", 30),
 
-                //new InputParameter("Porcentaje SL", -2D),
-                //new InputParameter("Porcentaje TP", 5D),
-
-                //new InputParameter("", 50),Ticks
+                new InputParameter("Quantity SL", 4000),
+                new InputParameter("Quantity TP", 8000),
             };
         }
 
@@ -105,8 +104,15 @@ namespace aroon_longs
             log.Debug("Aroon Longs onInitialize()");
 
             var indAroon = new AroonIndicator(Bars.Bars, (int)GetInputParameter("Aroon Period"));
+            var indFilterSMA = new SMAIndicator(Bars.Close, (int)GetInputParameter("Filter MA Period"));
 
+            AddIndicator("Filter SMA", indFilterSMA);
             AddIndicator("Aroon", indAroon);
+
+            dineroGanado = 0;
+            dineroPerdido = 0;
+            canClosePosition = false;
+            canOpenPosition = false;
         }
 
         /// <summary>
@@ -116,6 +122,10 @@ namespace aroon_longs
         public override void OnNewBar()
         {
             var indAroon = (AroonIndicator)GetIndicator("Aroon");
+            var indFilterSMA = (SMAIndicator)GetIndicator("Filter SMA");
+
+            //imprimirOrdenStop();
+            //imprimirOrdenLong();
 
             /* Condiciones de entrada:
              *      Línea Up > 80 durante N días.
@@ -143,66 +153,165 @@ namespace aroon_longs
                 if (canOpenPosition && indAroon.GetAroonUp()[0] >= (int)GetInputParameter("UpperLine") && indAroon.GetAroonDown()[0] <= (int)GetInputParameter("LowerLine"))
                 {
                     buyOrder = new MarketOrder(OrderSide.Buy, 1, "Trend confirmed, open long");
-                    this.InsertOrder(buyOrder);
+                    InsertOrder(buyOrder);
+
+                    stoplossInicial = precioValido(calcularNivelPrecioParaStopLoss(cantidadDinero: (int)GetInputParameter("Quantity SL")));
+                    StopOrder = new StopOrder(OrderSide.Sell, 1, stoplossInicial, "StopLoss triggered");
+                    InsertOrder(StopOrder);
+
                     canOpenPosition = false;
                 }
             }
             else if (GetOpenPosition() != 0)
             {
                 /* Si durante N días la línea Aroon Down se ha mantenido por encima de 80, cerrar posición. */
-                int counterClose = 0;
-                for (int i = (int)GetInputParameter("Wait Window"); i >= 1; i--)
+                //                int counterClose = 0;
+                //                for (int i = (int)GetInputParameter("Wait Window"); i >= 1; i--)
+                //                {
+                //                    if (indAroon.GetAroonDown()[i] >= (int)GetInputParameter("UpperLine"))
+                //                    {
+                //                        counterClose++;
+                //                    }
+                //                }
+                //                if (counterClose == (int)GetInputParameter("Wait Window"))
+                //                {
+                //                    canClosePosition = true;
+                //                }
+                //                if (canClosePosition && indAroon.GetAroonDown()[0] >= (int)GetInputParameter("UpperLine") && indAroon.GetAroonUp()[0] <= (int)GetInputParameter("LowerLine"))
+                //                {
+                //                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Uptrend finished confirmed, close long");
+                //                    this.InsertOrder(sellOrder);
+                //                    canClosePosition = false;
+                //                }
+                if (indFilterSMA.GetAvSimple()[0] >= Bars.Close[0])
                 {
-                    if (indAroon.GetAroonDown()[i] >= (int)GetInputParameter("UpperLine"))
-                    {
-                        counterClose++;
-                    }
+                    CancelOrder(StopOrder);
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Filter signal cancelled the long.");
+                    InsertOrder(sellOrder);
                 }
-                if (counterClose == (int)GetInputParameter("Wait Window"))
+                else if (activarTakeProfit())
                 {
-                    canClosePosition = true;
-                }
-                if (canClosePosition && indAroon.GetAroonDown()[0] >= (int)GetInputParameter("UpperLine") && indAroon.GetAroonUp()[0] <= (int)GetInputParameter("LowerLine"))
-                {
-                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "Uptrend finished confirmed, close long");
-                    this.InsertOrder(sellOrder);
-                    canClosePosition = false;
+                    CancelOrder(StopOrder);
+                    sellOrder = new MarketOrder(OrderSide.Sell, 1, "TakeProfit reached, profit: " + precioValido((Bars.Close[0] - buyOrder.FillPrice) * 20).ToString());
+                    InsertOrder(sellOrder);
                 }
             }
         }
 
+        //*******************************************************************************************************************************************************//
 
         // Devuelve en porcentaje cuánto se ha movido el precio desde la entrada.
-        protected double porcentajeMovimientoPrecio()
+        protected double porcentajeMovimientoPrecio(double precioOrigen)
         {
             double porcentaje = 0;
 
             // Calcular la variación porcentual del precio con respecto a la entrada.
-            if (Bars.Close[0] > buyOrder.FillPrice)
+            if (Bars.Close[0] > precioOrigen)
             {
                 // Precio actual por encima del precio de entrada.
-                porcentaje = ((Bars.Close[0] / buyOrder.FillPrice) - 1) * 100;
+                porcentaje = ((Bars.Close[0] / precioOrigen) - 1) * 100;
             }
-            else if (Bars.Close[0] < buyOrder.FillPrice)
+            else if (Bars.Close[0] < precioOrigen)
             {
                 // Precio actual por debajo del precio de entrada.
-                porcentaje = ((Bars.Close[0] / buyOrder.FillPrice) - 1) * 100;
+                porcentaje = ((Bars.Close[0] / precioOrigen) - 1) * 100;
             }
 
             return porcentaje;
         }
 
+
         // Implementación de un trailing stop para la estrategia
         protected void ajustarStopLoss(double siguienteNivelStop)
         {
             /* Cálculo del siguiente nivel propuesto para StopLoss */
-            siguienteNivelStop = stopLossOrder.Price + (stopLossOrder.Price * (int)GetInputParameter("Ticks") / 10000D);
+            siguienteNivelStop = StopOrder.Price + (StopOrder.Price * (int)GetInputParameter("Stoploss Ticks") / 100D);
             /* Si el precio avanza más de X "Ticks", muevo SL [Por ejemplo Ticks=50 -> 0.50% de subida] */
-            if ((this.Bars.Close[0] / siguienteNivelStop) - 1 >= (int)GetInputParameter("Ticks") / 10000D)
+            if ((Bars.Close[0] / siguienteNivelStop) - 1 >= (int)GetInputParameter("Stoploss Ticks") / 100D)
             {
-                stopLossOrder.Price = Math.Truncate(siguienteNivelStop);
-                stopLossOrder.Label = "Saltó StopLoss desplazado";
-                this.ModifyOrder(stopLossOrder);
+                StopOrder.Price = Math.Truncate(siguienteNivelStop);
+                StopOrder.Label = "Saltó StopLoss desplazado";
+                ModifyOrder(StopOrder);
+            }
+        }
+
+        // Convierte el precio dado para que sea valido para el Symbol.
+        protected double precioValido(double precio)
+        {
+            double resto = precio % GetMainChart().Symbol.TickSize;
+            double precioValido = precio;
+            if (resto != 0)
+            {
+                double ajuste = GetMainChart().Symbol.TickSize - resto;
+                precioValido += ajuste;
+            }
+            return precioValido;
+        }
+
+        //Devuelve el nivel de precio al que se debe ejecutar una orden para que se pierda la cantidadDinero pasada como parámetro.
+        protected double calcularNivelPrecioParaStopLoss(int cantidadDinero)
+        {
+            //TODO HACER ESTA FUNCIÓN QUE DEVUELVA EL NIVEL DEL PRECIO AL QUE SE DEBE COLOCAR LA ORDEN DE STOPLOSS PARA PERDER LA cantidadDinero PASA COMO PARÁMETRO (SERÁ UN INPUT PARAMETER LUEGO)
+            // El argumento cantidadDinero debe ser en términos absolutos, es decir si digo de perder 1000, es 1000 no -1000.
+            // Renombrar la 'i' y cambiar lo de devolver 0.
+            for (double i = Bars.Close[0]; i > 0; i -= 5)
+            {
+                if ((buyOrder.FillPrice - i) * 20 >= cantidadDinero)
+                {
+                    return i;
+                }
+            }
+            return 0;
+        }
+
+        //TODO Devuelve el nivel de precio al que se debe ejecutar una orden para que se gane la cantidadDinero pasada como parámetro.
+        protected bool activarTakeProfit()
+        {
+            if ((Bars.Close[0] - buyOrder.FillPrice) * 20 >= (int)GetInputParameter("Quantity TP"))
+            {
+                return true;
+            }
+            return false;
+        }
+
+        //Loggear si se ha ejecutado una orden Stop.
+        protected void imprimirOrdenStop()
+        {
+            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Stop)
+            {
+                if (dineroPerdido != (GetFilledOrders()[0].FillPrice - buyOrder.FillPrice) * Symbol.PointValue)
+                {
+                    dineroPerdido = (GetFilledOrders()[0].FillPrice - buyOrder.FillPrice) * Symbol.PointValue;
+                    log.Error("StopLoss  Ejecutado! Pierdo: " + Math.Truncate(dineroPerdido));
+                }
+            }
+        }
+
+        //Loggear si se ha ejectuado una orden Long
+        protected void imprimirOrdenLong()
+        {
+            if (GetFilledOrders()[0] != null && GetFilledOrders()[0].Type == OrderType.Market && GetFilledOrders()[0].Side == OrderSide.Sell)
+            {
+                if (dineroGanado != (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue)
+                {
+                    dineroGanado = (sellOrder.FillPrice - buyOrder.FillPrice) * Symbol.PointValue;
+                    if (sellOrder.Label == "Filter signal cancelled the long.")
+                    {
+                        if (dineroGanado > 0)
+                        {
+                            log.Warn("Filtro cancela long! Gano: " + Math.Truncate(dineroGanado));
+                        }
+                        else
+                        {
+                            log.Warn("Filtro cancela long!            Pierdo: " + Math.Truncate(dineroGanado));
+                        }
+
+                    }
+                    else
+                    {
+                        log.Info("LongOrder Ejecutada! Gano: " + Math.Truncate(dineroGanado));
+                    }
+                }
             }
         }
     }
